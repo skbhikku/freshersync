@@ -1,4 +1,15 @@
 # Getting Started with Create React App
+# FreshersSync
+
+A slot booking website for freshers to schedule interviews.
+
+[![Netlify Status](https://api.netlify.com/api/v1/badges/68f11c8d-7179-4ae7-929c-d332fcbcfea9/deploy-status)](https://app.netlify.com/projects/freshersync/deploys)
+
+## Features
+- Register and login
+- Email OTP verification
+- Slot booking with Razorpay payment
+- Confirmation via email
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
