@@ -1,10 +1,9 @@
 # Getting Started with Create React App
 # FreshersSync
 
+
+[![Netlify Status](https://api.netlify.com/api/v1/badges/a9f9f2ad-bba8-46db-9c69-5450c93a5805/deploy-status?branch=main)](https://app.netlify.com/sites/spectacular-snickerdoodle-41781f/overview)
 A slot booking website for freshers to schedule interviews.
-
-[![Netlify Status](https://api.netlify.com/api/v1/badges/68f11c8d-7179-4ae7-929c-d332fcbcfea9/deploy-status)](https://app.netlify.com/projects/freshersync/deploys)
-
 ## Features
 - Register and login
 - Email OTP verification
