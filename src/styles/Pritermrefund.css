@@ -1,0 +1,113 @@
+.privacy-container {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  line-height: 1.6;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.privacy-container h1 {
+  color: #2563eb;
+  border-bottom: 2px solid #2563eb;
+  padding-bottom: 10px;
+}
+
+.privacy-container h2 {
+  color: #3b82f6;
+  margin-top: 25px;
+}
+
+.last-updated {
+  background-color: #f0f9ff;
+  padding: 10px;
+  border-radius: 5px;
+  margin-bottom: 20px;
+}
+
+.contact {
+  background-color: #eff6ff;
+  padding: 15px;
+  border-radius: 5px;
+  margin-top: 20px;
+}
+.terms-container {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  line-height: 1.6;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.terms-container h1 {
+  color: #2563eb;
+  border-bottom: 2px solid #2563eb;
+  padding-bottom: 10px;
+}
+
+.terms-container h2 {
+  color: #3b82f6;
+  margin-top: 25px;
+}
+
+.effective-date {
+  background-color: #f0f9ff;
+  padding: 10px;
+  border-radius: 5px;
+  margin-bottom: 20px;
+}
+
+.notice {
+  background-color: #fffbeb;
+  padding: 15px;
+  border-radius: 5px;
+  margin: 20px 0;
+}
+.refund-container {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  line-height: 1.6;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.refund-container h1 {
+  color: #2563eb;
+  border-bottom: 2px solid #2563eb;
+  padding-bottom: 10px;
+}
+
+.policy-summary {
+  background-color: #f0fdf4;
+  padding: 15px;
+  border-radius: 5px;
+  margin: 20px 0;
+}
+
+.no-refund {
+  background-color: #fef2f2;
+  padding: 15px;
+  border-radius: 5px;
+}
+
+.refund-process {
+  background-color: #fffbeb;
+  padding: 15px;
+  border-radius: 5px;
+  margin-top: 20px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 20px 0;
+}
+
+th, td {
+  border: 1px solid #cbd5e1;
+  padding: 10px;
+  text-align: left;
+}
+
+th {
+  background-color: #dbeafe;
+}
