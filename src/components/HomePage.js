@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable no-unused-vars */
 /* eslint-disable jsx-a11y/anchor-is-valid */
 import React from 'react';
@@ -351,15 +352,15 @@ const processSlots = (backendSlots) => {
             <div className="footer-section">
               <h3>Legal</h3>
               <ul className="footer-links">
-                <li><a href="/terms-conditions" className="footer-link">Terms & Conditions</a></li>
-                <li><a href="/privacy-policy" className="footer-link">Privacy Policy</a></li>
-                <li><a href="/refund-policy" className="footer-link">Refund Policy</a></li>
+                <li><a href="#" className="footer-link">Terms & Conditions</a></li>
+                <li><a href="#" className="footer-link">Privacy Policy</a></li>
+                <li><a href="#" className="footer-link">Refund Policy</a></li>
               </ul>
             </div>
             <div className="footer-section">
               <h3>Contact Us</h3>
-              <p>Email: freshersync@freshersync.xyz</p>
-              <p>Phone: +91 6301502931</p>
+              <p>Email: support@bookyourfuture.com</p>
+              <p>Phone: +1 (555) 123-4567</p>
             </div>
           </div>
           <div className="footer-bottom">

@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useEffect } from 'react';
 import DatePicker from 'react-datepicker';
 import { getAvailableSlots, createOrder, verifyPayment, getBookedSlot } from '../api/auth';
@@ -37,6 +38,7 @@ export default function Dashboard() {
   const [success, setSuccess] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [bookedSlots, setBookedSlots] = useState([]);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const storedUser = JSON.parse(localStorage.getItem('user'));
@@ -50,7 +52,7 @@ export default function Dashboard() {
 
   const fetchUserData = () => {
     const stored = JSON.parse(localStorage.getItem('user'));
-    if (stored)setUser(stored);
+    if (stored) setUser(stored);
     fetchBookedSlots(stored.email);
   };
 
@@ -117,10 +119,10 @@ export default function Dashboard() {
     setSuccess('');
   };
 
-    const handleSlotSelect = (time) => {
-  setSelectedSlot(current => current === time ? null : time); // Toggle selection
-  setError('');
-};
+  const handleSlotSelect = (time) => {
+    setSelectedSlot(current => current === time ? null : time);
+    setError('');
+  };
 
   const handlePayment = async () => {
     if (!selectedDate || !selectedSlot) {
@@ -197,7 +199,6 @@ export default function Dashboard() {
     }
   };
 
-
   const getAvailableDates = () =>
     filteredSlots.map(slot => new Date(slot.date));
 
@@ -208,23 +209,56 @@ export default function Dashboard() {
 
   return (
     <div className="dashboard-container">
+      {/* Responsive Navbar */}
+      <nav className="navbar">
+        <div className="navbar-container">
+          <div className="navbar-brand">
+            fresher<span>Sync</span>
+          </div>
+          
+          <div className="navbar-menu">
+            {/* Mobile menu button */}
+            <button 
+              className="mobile-menu-button"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            >
+              <span className="menu-icon-bar"></span>
+              <span className="menu-icon-bar"></span>
+              <span className="menu-icon-bar"></span>
+            </button>
+            
+            {/* Navigation Links */}
+            <div className={`nav-links ${mobileMenuOpen ? 'open' : ''}`}>
+              <a href="#booking" onClick={() => setMobileMenuOpen(false)}>
+                
+              </a>
+              <a href="#booked-slots" onClick={() => setMobileMenuOpen(false)}>
+                
+              </a>
+              <button 
+                className="nav-settings-button"
+                onClick={() => {
+                  setShowSettings(true);
+                  setMobileMenuOpen(false);
+                }}
+              >
+                Settings
+              </button>
+            </div>
+          </div>
+        </div>
+      </nav>
 
-      <header className="header">
-          <div className="navbar-brand">fresher<span>Sync</span></div>
-          <div className="offer-banner">
-    🎉 Special Bakrid Offer! 🎁 Interview Fee: 
-    <span className="old-price">₹100</span> → 
-    <span className="new-price">₹49 Only!</span> 
-    Limited Period Offer ⏳
-  </div>
-        <button onClick={() => setShowSettings(true)}>Settings</button>
-        {showSettings && (
-          <Settings user={user} closeModal={() => setShowSettings(false)} refreshUser={fetchUserData} />
-        )}
-      </header>
+      {showSettings && (
+        <Settings 
+          user={user} 
+          closeModal={() => setShowSettings(false)} 
+          refreshUser={fetchUserData} 
+        />
+      )}
 
       <main className="main-content">
-        <div className="booking-container">
+        <div className="booking-container" id="booking">
           <div className="calendar-section">
             <h2>Select Date</h2>
             <DatePicker
@@ -233,23 +267,21 @@ export default function Dashboard() {
               includeDates={getAvailableDates()}
               inline
             />
-             {/* Add this instructions container */}
-  <div className="booking-instructions">
-    <h3>Booking Process</h3>
-    <ol>
-      <li>Select date & choose available time slot</li>
-      <li>Click "Pay ₹100" to complete booking, and check email for confirmation</li>
-    
-    </ol>
-    
-    <div className="note-box">
-      <strong>Important Note:</strong>
-      <ul>
-        <li>Google Meet link shared 1 day before interview</li>
-        <li>For today's bookings: Link shared 1 hour prior</li>
-      </ul>
-    </div>
-  </div>
+            <div className="booking-instructions">
+              <h3>Booking Process</h3>
+              <ol>
+                <li>Select date & choose available time slot</li>
+                <li>Click "Pay<s>₹100</s> only ₹49" to complete booking</li>
+                <li>Check email for confirmation</li>
+              </ol>
+              <div className="note-box">
+                <strong>Important Note:</strong>
+                <ul>
+                  <li>Google Meet link shared 1 day before interview</li>
+                  <li>For today's bookings: Link shared 1 hour prior</li>
+                </ul>
+              </div>
+            </div>
           </div>
 
           {selectedDate && (
@@ -262,15 +294,15 @@ export default function Dashboard() {
 
                   return (
                     <button
-  key={index}
-  className={`time-slot ${isSelected ? 'selected' : ''} ${status}`}
-  onClick={() => status === 'available' && handleSlotSelect(slot.time)}
-  disabled={status !== 'available'}
->
-  {slot.time}
-  {status === 'expired' && <span className="expired-label">Expired</span>}
-  {status === 'booked' && <span className="booked-label">Booked</span>}
-</button>
+                      key={index}
+                      className={`time-slot ${isSelected ? 'selected' : ''} ${status}`}
+                      onClick={() => status === 'available' && handleSlotSelect(slot.time)}
+                      disabled={status !== 'available'}
+                    >
+                      {slot.time}
+                      {status === 'expired' && <span className="expired-label">Expired</span>}
+                      {status === 'booked' && <span className="booked-label">Booked</span>}
+                    </button>
                   );
                 })}
               </div>
@@ -289,26 +321,26 @@ export default function Dashboard() {
         </div>
 
         {bookedSlots.length === 0 ? (
-  <div className="booked-slots-section">
-    <h2>Book Your First Interview</h2>
-    <p>No interviews booked yet. Take the first step in your career journey - schedule your interview now!</p>
-  </div>
-) : (
-  <div className="booked-slots-section">
-    {new Date(`${bookedSlots[0].date}T${bookedSlots[0].time}`) > new Date() ? (
-      <>
-        <h2>Your Upcoming Interview</h2>
-        <p><strong>Scheduled:</strong> {bookedSlots[0].date} at {bookedSlots[0].time}</p>
-        <p className="reminder">Get ready for your upcoming interview! Make sure to prepare your materials in advance.</p>
-      </>
-    ) : (
-      <>
-        <h2>Your Last Booked Interview</h2>
-        <p><strong>Last Attended:</strong> {bookedSlots[0].date} at {bookedSlots[0].time}</p>
-      </>
-    )}
-  </div>
-)}
+          <div className="booked-slots-section" id="booked-slots">
+            <h2>Book Your First Interview</h2>
+            <p>No interviews booked yet. Take the first step in your career journey - schedule your interview now!</p>
+          </div>
+        ) : (
+          <div className="booked-slots-section" id="booked-slots">
+            {new Date(`${bookedSlots[0].date}T${bookedSlots[0].time}`) > new Date() ? (
+              <>
+                <h2>Your Upcoming Interview</h2>
+                <p><strong>Scheduled:</strong> {bookedSlots[0].date} at {bookedSlots[0].time}</p>
+                <p className="reminder">Get ready for your upcoming interview! Make sure to prepare your materials in advance.</p>
+              </>
+            ) : (
+              <>
+                <h2>Your Last Booked Interview</h2>
+                <p><strong>Last Attended:</strong> {bookedSlots[0].date} at {bookedSlots[0].time}</p>
+              </>
+            )}
+          </div>
+        )}
       </main>
 
       <Sections />

@@ -490,7 +490,9 @@ input:focus, button:focus {
   }
   
   .register-header {
-    padding: 1.5rem;
+    padding: 2px;
+
+
   }
   
   .register-form {

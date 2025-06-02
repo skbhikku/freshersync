@@ -234,6 +234,7 @@ a {
   align-items: center;
   position: relative;
   overflow: hidden;
+  top: 110px;
 }
 
 .hero:before {
@@ -1227,12 +1228,21 @@ a {
 @media (max-width: 768px) {
   .navbar-nav {
     display: none;
+
+  }
+  .navbar-auth .btn-register{
+    padding: 2px;
   }
   
   .hero {
     padding: 4rem 0;
   }
-  
+  .btn-login{
+    font-weight: 700;
+  }
+  .btn-register{
+    font-weight: 700;
+  }
   .hero-title {
     font-size: 2.25rem;
   }
@@ -1432,3 +1442,5 @@ a {
   font-size: 0.9rem;
   color: #666;
 }
+
+
