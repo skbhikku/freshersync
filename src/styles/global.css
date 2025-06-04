@@ -1,0 +1,260 @@
+/* Modern CSS Architecture - 2025 Edition
+ * Developed with advanced responsive design patterns and performance optimization
+ * Following CUBE CSS methodology (Composition Utility Block Exception)
+ */
+
+:root {
+  /* Color System - Using Modern Color Science HSL */
+  --color-primary-h: 235;
+  --color-primary-s: 69%;
+  --color-primary-l: 61%;
+  --color-primary: hsl(var(--color-primary-h) var(--color-primary-s) var(--color-primary-l));
+  --color-primary-light: hsl(var(--color-primary-h) var(--color-primary-s) calc(var(--color-primary-l) + 15%));
+  --color-primary-dark: hsl(var(--color-primary-h) var(--color-primary-s) calc(var(--color-primary-l) - 15%));
+
+  /* Semantic Colors */
+  --color-success: hsl(142 76% 36%);
+  --color-warning: hsl(38 92% 50%);
+  --color-error: hsl(0 84% 60%);
+
+  /* Neutral Colors */
+  --color-surface-0: hsl(0 0% 100%);
+  --color-surface-50: hsl(210 20% 98%);
+  --color-surface-100: hsl(220 14% 96%);
+  --color-surface-200: hsl(220 13% 91%);
+  --color-surface-300: hsl(216 12% 84%);
+  --color-surface-400: hsl(218 11% 65%);
+  --color-surface-500: hsl(220 9% 46%);
+  --color-surface-600: hsl(215 14% 34%);
+  --color-surface-700: hsl(217 19% 27%);
+  --color-surface-800: hsl(215 28% 17%);
+  --color-surface-900: hsl(221 39% 11%);
+
+  /* Typography */
+  --font-family-base: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-family-heading: var(--font-family-base);
+  
+  /* Font Sizes - Using Modern Fluid Typography */
+  --fs-300: clamp(0.7rem, 0.66rem + 0.2vw, 0.8rem);
+  --fs-400: clamp(0.88rem, 0.83rem + 0.24vw, 1rem);
+  --fs-500: clamp(1.09rem, 1rem + 0.47vw, 1.33rem);
+  --fs-600: clamp(1.37rem, 1.21rem + 0.8vw, 1.78rem);
+  --fs-700: clamp(1.71rem, 1.45rem + 1.29vw, 2.37rem);
+  --fs-800: clamp(2.14rem, 1.74rem + 1.99vw, 3.16rem);
+  --fs-900: clamp(2.67rem, 2.07rem + 3vw, 4.21rem);
+
+  /* Spacing System */
+  --space-3xs: clamp(0.25rem, 0.23rem + 0.11vw, 0.31rem);
+  --space-2xs: clamp(0.5rem, 0.46rem + 0.22vw, 0.63rem);
+  --space-xs: clamp(0.75rem, 0.68rem + 0.33vw, 0.94rem);
+  --space-s: clamp(1rem, 0.91rem + 0.43vw, 1.25rem);
+  --space-m: clamp(1.5rem, 1.37rem + 0.65vw, 1.88rem);
+  --space-l: clamp(2rem, 1.83rem + 0.87vw, 2.5rem);
+  --space-xl: clamp(3rem, 2.74rem + 1.3vw, 3.75rem);
+  --space-2xl: clamp(4rem, 3.65rem + 1.74vw, 5rem);
+  --space-3xl: clamp(6rem, 5.48rem + 2.61vw, 7.5rem);
+
+  /* Border Radius */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 1rem;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+
+  /* Transitions */
+  --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: 400ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-bounce: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Z-index Scale */
+  --z-negative: -1;
+  --z-elevate: 1;
+  --z-sticky: 100;
+  --z-drawer: 200;
+  --z-modal: 300;
+  --z-popover: 400;
+  --z-toast: 500;
+}
+
+/* Modern CSS Reset with Performance Optimizations */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  scroll-behavior: smooth;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-family-base);
+  font-size: var(--fs-400);
+  line-height: 1.5;
+  color: var(--color-surface-900);
+  background-color: var(--color-surface-50);
+  min-height: 100vh;
+  text-rendering: optimizeSpeed;
+}
+
+/* Modern Image Handling */
+img, picture, video, canvas, svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* Typography Reset */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-family-heading);
+  line-height: 1.2;
+  overflow-wrap: break-word;
+}
+
+h1 { font-size: var(--fs-800); }
+h2 { font-size: var(--fs-700); }
+h3 { font-size: var(--fs-600); }
+h4 { font-size: var(--fs-500); }
+h5 { font-size: var(--fs-400); }
+h6 { font-size: var(--fs-300); }
+
+/* Form Element Reset */
+input, button, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+
+/* Button Reset */
+button {
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+/* List Reset */
+ul[role="list"],
+ol[role="list"] {
+  list-style: none;
+}
+
+/* Link Reset */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Composition Classes */
+.flow > * + * {
+  margin-top: var(--flow-space, 1em);
+}
+
+.cluster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cluster-gap, 1rem);
+  justify-content: var(--cluster-justify, flex-start);
+  align-items: var(--cluster-align, center);
+}
+
+.grid {
+  display: grid;
+  gap: var(--grid-gap, 1rem);
+  grid-template-columns: repeat(var(--grid-cols, auto-fit), minmax(var(--grid-min-width, 250px), 1fr));
+}
+
+/* Container */
+.container {
+  width: min(100% - 2rem, var(--container-max, 80rem));
+  margin-inline: auto;
+}
+
+/* Utility Classes */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Animation Classes */
+.fade-in {
+  animation: fadeIn var(--transition-base);
+}
+
+.slide-up {
+  animation: slideUp var(--transition-bounce);
+}
+
+/* Animation Keyframes */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Media Queries */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+  }
+
+  body {
+    color: var(--color-surface-50);
+    background-color: var(--color-surface-900);
+  }
+}
+
+/* Print Styles */
+@media print {
+  @page {
+    margin: 2cm;
+  }
+
+  body {
+    min-height: 100%;
+    color: black;
+    background: white;
+  }
+
+  .no-print {
+    display: none;
+  }
+}
