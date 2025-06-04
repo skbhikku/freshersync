@@ -130,7 +130,7 @@ export default function Register({ onClose }) {
   };
 
   return (
-    <div className="register-container">
+    <div className="register-containers">
       <div className="register-form-container">
         <div className="register-header">
           <h1>Create Account</h1>
