@@ -142,12 +142,6 @@ a {
   align-items: center;
 }
 
-.navbar-brand {
-  font-weight: 700;
-  font-size: 1.5rem;
-  color: hsl(218, 51%, 33%);
-  text-decoration: none;
-}
 
 .navbar-brand span {
   color: hsl(187, 52%, 45%);
@@ -234,7 +228,7 @@ a {
   align-items: center;
   position: relative;
   overflow: hidden;
-  top: 110px;
+  top: 108px;
 }
 
 .hero:before {
@@ -747,7 +741,6 @@ a {
 
 .target-description {
   color: hsl(218, 15%, 40%);
-  font-size: 1.05rem;
   line-height: 1.6;
 }
 
@@ -803,7 +796,7 @@ a {
 
 .value-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 2rem;
 }
 
@@ -873,7 +866,6 @@ a {
 
 .value-item-description {
   color: hsl(218, 15%, 40%);
-  font-size: 1.05rem;
   line-height: 1.6;
 }
 
@@ -1063,7 +1055,7 @@ a {
 
 .home-slots-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 1.5rem;
 }
 
@@ -1333,6 +1325,16 @@ a {
   .modal-content{
   padding: 1rem 0.5rem;
 }
+  .navbar-brand{
+    font-size: 10px;
+  }
+  .hero{
+    top: 70px;
+  }
+  .value-grid ,.target-grid ,.home-slots-grid ,.features-grid{
+    grid-template-columns: repeat(auto-fit, minmax(200px,1fr));
+    font-size: 15px;
+  }
 }
 /* Modal Styles */
 .modal-overlay {
