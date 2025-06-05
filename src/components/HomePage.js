@@ -359,8 +359,8 @@ const processSlots = (backendSlots) => {
             </div>
             <div className="footer-section">
               <h3>Contact Us</h3>
-              <p>Email: support@bookyourfuture.com</p>
-              <p>Phone: +1 (555) 123-4567</p>
+              <p>Email: freshersync@freshersync.xyz</p>
+              <p>Phone: +91 63015 02931</p>
             </div>
           </div>
           <div className="footer-bottom">
