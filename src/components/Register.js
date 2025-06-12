@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { registerUser, verifyOtp } from '../api/auth';
 import { useNavigate } from 'react-router-dom';
-import '../styles/LogReg.css';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, CheckCircle, XCircle, Shield } from 'lucide-react';
 
 export default function Register({ onClose }) {
   const [form, setForm] = useState({
@@ -22,6 +21,8 @@ export default function Register({ onClose }) {
   const [registrationError, setRegistrationError] = useState('');
   const [otpError, setOtpError] = useState('');
   const [otpSuccess, setOtpSuccess] = useState('');
+  const [isRobotChecked, setIsRobotChecked] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -92,6 +93,11 @@ export default function Register({ onClose }) {
     e.preventDefault();
     setRegistrationError('');
 
+    if (!isRobotChecked) {
+      setRegistrationError('Please confirm you are not a robot');
+      return;
+    }
+
     const allTouched = Object.keys(form).reduce((acc, key) => {
       acc[key] = true;
       return acc;
@@ -100,6 +106,7 @@ export default function Register({ onClose }) {
 
     if (!validateForm()) return;
 
+    setIsSubmitting(true);
     try {
       const { confirmPassword, ...userData } = form;
       await registerUser(userData);
@@ -107,6 +114,8 @@ export default function Register({ onClose }) {
       setShowOtpModal(true);
     } catch (err) {
       setRegistrationError(err.response?.data?.message || 'Registration failed');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -130,151 +139,249 @@ export default function Register({ onClose }) {
   };
 
   return (
-    <div className="register-containers">
-      <div className="register-form-container">
-        <div className="register-header">
-          <h1>Create Account</h1>
-          <p>Enter your details to get started</p>
+    <div className="p-8">
+      <div className="text-center mb-8">
+        <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <Shield className="w-8 h-8 text-white" />
         </div>
-        <form onSubmit={handleSubmit} className="register-form">
-          <div className={`input-container ${errors.name ? 'error' : ''}`}>
+        <h1 className="text-3xl font-bold text-slate-900 mb-2">Create Account</h1>
+        <p className="text-slate-600">Join thousands of successful job seekers</p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">Full Name</label>
             <input
               type="text"
               name="name"
-              placeholder="Full Name"
+              placeholder="Enter your full name"
               value={form.name}
               onChange={handleChange}
               onBlur={handleBlur}
+              className={`input-field ${errors.name ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-blue-500'}`}
             />
+            {touched.name && errors.name && (
+              <p className="mt-1 text-sm text-red-600 flex items-center">
+                <XCircle className="w-4 h-4 mr-1" />
+                {errors.name}
+              </p>
+            )}
           </div>
-          {touched.name && errors.name && <span className="error-message">{errors.name}</span>}
 
-          <div className={`input-container ${errors.email ? 'error' : ''}`}>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">Email Address</label>
             <input
               type="email"
               name="email"
-              placeholder="Email"
+              placeholder="Enter your email"
               value={form.email}
               onChange={handleChange}
               onBlur={handleBlur}
+              className={`input-field ${errors.email ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-blue-500'}`}
             />
+            {touched.email && errors.email && (
+              <p className="mt-1 text-sm text-red-600 flex items-center">
+                <XCircle className="w-4 h-4 mr-1" />
+                {errors.email}
+              </p>
+            )}
           </div>
-          {touched.email && errors.email && <span className="error-message">{errors.email}</span>}
+        </div>
 
-          <div className={`input-container ${errors.phone ? 'error' : ''}`}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">Phone Number</label>
             <input
               type="text"
               name="phone"
-              placeholder="Phone Number"
+              placeholder="Enter 10-digit phone number"
               value={form.phone}
               onChange={handleChange}
               onBlur={handleBlur}
+              className={`input-field ${errors.phone ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-blue-500'}`}
             />
+            {touched.phone && errors.phone && (
+              <p className="mt-1 text-sm text-red-600 flex items-center">
+                <XCircle className="w-4 h-4 mr-1" />
+                {errors.phone}
+              </p>
+            )}
           </div>
-          {touched.phone && errors.phone && <span className="error-message">{errors.phone}</span>}
 
-          <div className={`input-container ${errors.college ? 'error' : ''}`}>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">College Name</label>
             <input
               type="text"
               name="college"
-              placeholder="College Name"
+              placeholder="Enter your college name"
               value={form.college}
               onChange={handleChange}
               onBlur={handleBlur}
+              className={`input-field ${errors.college ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-blue-500'}`}
             />
+            {touched.college && errors.college && (
+              <p className="mt-1 text-sm text-red-600 flex items-center">
+                <XCircle className="w-4 h-4 mr-1" />
+                {errors.college}
+              </p>
+            )}
           </div>
-          {touched.college && errors.college && <span className="error-message">{errors.college}</span>}
+        </div>
 
-          <div className={`input-container ${errors.password ? 'error' : ''}`}>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-2">Password</label>
+          <div className="relative">
             <input
               type={showPassword ? 'text' : 'password'}
               name="password"
-              placeholder="Password"
+              placeholder="Create a strong password"
               value={form.password}
               onChange={handleChange}
               onBlur={handleBlur}
+              className={`input-field pr-12 ${errors.password ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-blue-500'}`}
             />
             <button
               type="button"
-              className="toggle-password"
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
               onClick={() => setShowPassword(!showPassword)}
             >
-              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
             </button>
           </div>
-          {touched.password && errors.password && <span className="error-message">{errors.password}</span>}
+          {touched.password && errors.password && (
+            <p className="mt-1 text-sm text-red-600 flex items-center">
+              <XCircle className="w-4 h-4 mr-1" />
+              {errors.password}
+            </p>
+          )}
+        </div>
 
-          <div className={`input-container ${errors.confirmPassword ? 'error' : ''}`}>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-2">Confirm Password</label>
+          <div className="relative">
             <input
               type={showConfirmPassword ? 'text' : 'password'}
               name="confirmPassword"
-              placeholder="Confirm Password"
+              placeholder="Confirm your password"
               value={form.confirmPassword}
               onChange={handleChange}
               onBlur={handleBlur}
+              className={`input-field pr-12 ${errors.confirmPassword ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-blue-500'}`}
             />
             <button
               type="button"
-              className="toggle-password"
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
             >
-              {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
             </button>
           </div>
           {touched.confirmPassword && errors.confirmPassword && (
-            <span className="error-message">{errors.confirmPassword}</span>
+            <p className="mt-1 text-sm text-red-600 flex items-center">
+              <XCircle className="w-4 h-4 mr-1" />
+              {errors.confirmPassword}
+            </p>
           )}
+        </div>
 
-          <div className="form-actions">
-            <button
-              type="submit"
-              className="register-button"
-              disabled={Object.keys(errors).length > 0}
-            >
-              Register
-            </button>
-          </div>
+        {/* Robot Verification */}
+        <div className="flex items-center space-x-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
+          <input
+            type="checkbox"
+            id="robotCheck"
+            checked={isRobotChecked}
+            onChange={(e) => setIsRobotChecked(e.target.checked)}
+            className="w-5 h-5 text-blue-600 bg-white border-slate-300 rounded focus:ring-blue-500 focus:ring-2"
+          />
+          <label htmlFor="robotCheck" className="text-sm font-medium text-slate-700 flex items-center">
+            <Shield className="w-4 h-4 mr-2 text-blue-600" />
+            I'm not a robot
+          </label>
+        </div>
 
-          {registrationError && (
-            <div className="error-message server-error">
-              {registrationError}
+        <button
+          type="submit"
+          disabled={Object.keys(errors).length > 0 || !isRobotChecked || isSubmitting}
+          className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+        >
+          {isSubmitting ? (
+            <div className="flex items-center justify-center">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+              Creating Account...
             </div>
+          ) : (
+            'Create Account'
           )}
-        </form>
-      </div>
+        </button>
 
+        {registrationError && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
+            <p className="text-sm text-red-600 flex items-center">
+              <XCircle className="w-4 h-4 mr-2" />
+              {registrationError}
+            </p>
+          </div>
+        )}
+      </form>
+
+      {/* OTP Modal */}
       {showOtpModal && (
-        <div className="otp-modal-overlay">
-          <div className="otp-modal-content">
-            <h2>Verify OTP</h2>
-            <p className="otp-instructions">Check your email for the OTP</p>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-gradient-to-r from-green-500 to-emerald-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="w-8 h-8 text-white" />
+              </div>
+              <h2 className="text-2xl font-bold text-slate-900 mb-2">Verify Your Email</h2>
+              <p className="text-slate-600">We've sent a verification code to your email</p>
+            </div>
             
             {otpSuccess && (
-              <div className="success-message">{otpSuccess}</div>
+              <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-xl">
+                <p className="text-sm text-green-600 flex items-center">
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  {otpSuccess}
+                </p>
+              </div>
             )}
             
             {otpError && (
-              <div className="error-message">{otpError}</div>
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl">
+                <p className="text-sm text-red-600 flex items-center">
+                  <XCircle className="w-4 h-4 mr-2" />
+                  {otpError}
+                </p>
+              </div>
             )}
 
-            <form onSubmit={handleOtpSubmit}>
-              <input
-                type="text"
-                placeholder="Enter OTP"
-                value={otpCode}
-                onChange={(e) => {
-                  setOtpCode(e.target.value);
-                  setOtpError('');
-                }}
-                required
-              />
-              <div className="otp-buttons">
-                <button type="submit" className="verify-button">
-                  Verify OTP
+            <form onSubmit={handleOtpSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Verification Code</label>
+                <input
+                  type="text"
+                  placeholder="Enter 6-digit code"
+                  value={otpCode}
+                  onChange={(e) => {
+                    setOtpCode(e.target.value);
+                    setOtpError('');
+                  }}
+                  className="input-field text-center text-lg tracking-widest"
+                  maxLength="6"
+                  required
+                />
+              </div>
+              
+              <div className="flex space-x-3">
+                <button
+                  type="submit"
+                  className="flex-1 btn-primary"
+                >
+                  Verify Email
                 </button>
                 <button
                   type="button"
-                  className="cancel-button"
+                  className="flex-1 bg-slate-100 text-slate-700 hover:bg-slate-200 font-semibold py-3 px-6 rounded-xl transition-all duration-300"
                   onClick={() => setShowOtpModal(false)}
                 >
                   Cancel
