@@ -17,7 +17,7 @@ import {
   AcademicCapIcon,
   BriefcaseIcon,
   CalendarDaysIcon,
-  HandshakeIcon,
+  UserPlusIcon,
   DevicePhoneMobileIcon,
   ComputerDesktopIcon
 } from '@heroicons/react/24/outline';
@@ -170,7 +170,7 @@ const HomePage = () => {
       description: "No more waiting for callback or uncertainty about your interview"
     },
     { 
-      icon: HandshakeIcon, 
+      icon: UserPlusIcon, 
       title: "Direct access to hiring teams", 
       description: "Skip the long recruitment process and connect directly"
     },
