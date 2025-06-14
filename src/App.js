@@ -5,6 +5,7 @@ import VerifyOtp from './components/VerifyOtp';
 import Login from './components/Login';
 import HomePage from './components/HomePage';
 import Dashboard from './components/Dashboard';
+import Interview from './components/Interview';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsConditions from './components/TermsConditions';
 import RefundPolicy from './components/RefundPolicy';
@@ -18,6 +19,7 @@ function App() {
         <Route path="/verify" element={<VerifyOtp />} />
         <Route path="/login" element={<Login />} />
         <Route path="/dashboard" element={<Dashboard/>} />
+        <Route path="/ai-interview" element={<Interview/>} />
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
         <Route path="/terms-conditions" element={<TermsConditions />} />
         <Route path="/refund-policy" element={<RefundPolicy />} />

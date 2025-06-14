@@ -1,7 +1,22 @@
-/* eslint-disable no-unused-vars */
 import React, { useState, useRef, useEffect } from 'react';
 import { extractTextFromPDF } from './resumeAnalysis';
 import { Worker } from '@react-pdf-viewer/core';
+import { 
+  Mic, 
+  MicOff, 
+  Play, 
+  Download, 
+  Upload, 
+  FileText, 
+  Eye, 
+  EyeOff,
+  Volume2,
+  RotateCcw,
+  CheckCircle,
+  XCircle,
+  Loader2
+} from 'lucide-react';
+import jsPDF from 'jspdf';
 
 const Interview = () => {
   const [recording, setRecording] = useState(false);
@@ -17,6 +32,8 @@ const Interview = () => {
   const [interviewCompleted, setInterviewCompleted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showResume, setShowResume] = useState(false);
+  const [interviewData, setInterviewData] = useState([]);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -45,21 +62,19 @@ const Interview = () => {
     }
   };
 
-const formatResume = async (rawText) => {
-    // Validate input
+  const formatResume = async (rawText) => {
     if (!rawText || typeof rawText !== 'string' || rawText.trim().length === 0) {
-        console.error("Invalid rawText provided");
-        return rawText;
+      console.error("Invalid rawText provided");
+      return rawText;
     }
 
-    // Ensure we don't exceed API limits while preserving meaningful content
     const maxLength = 3000;
     const truncatedText = rawText.length > maxLength 
-        ? rawText.substring(0, maxLength) + "... [truncated for length]"
-        : rawText;
+      ? rawText.substring(0, maxLength) + "... [truncated for length]"
+      : rawText;
 
     try {
-        const prompt = `You are a professional resume writer. Transform the following resume text into a perfectly formatted, professional resume. Follow these rules STRICTLY:
+      const prompt = `You are a professional resume writer. Transform the following resume text into a perfectly formatted, professional resume. Follow these rules STRICTLY:
 
 1. STRUCTURE:
    - Header (Name, Contact Info, Links)
@@ -89,68 +104,65 @@ ${truncatedText}
 
 Formatted Resume (follow exact structure above):`;
 
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-            {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [{ text: prompt }],
-                        role: "user"
-                    }],
-                    generationConfig: {
-                        temperature: 0.2,  // More focused output
-                        topP: 0.7,
-                        topK: 30,
-                        maxOutputTokens: 2000
-                    },
-                    safetySettings: [
-                        {
-                            "category": "HARM_CATEGORY_HARASSMENT",
-                            "threshold": "BLOCK_ONLY_HIGH"
-                        }
-                    ]
-                }),
-                signal: AbortSignal.timeout(15000)  // 15 seconds timeout
-            }
-        );
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(`API request failed: ${response.status} - ${JSON.stringify(errorData)}`);
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{ text: prompt }],
+              role: "user"
+            }],
+            generationConfig: {
+              temperature: 0.2,
+              topP: 0.7,
+              topK: 30,
+              maxOutputTokens: 2000
+            },
+            safetySettings: [
+              {
+                "category": "HARM_CATEGORY_HARASSMENT",
+                "threshold": "BLOCK_ONLY_HIGH"
+              }
+            ]
+          }),
+          signal: AbortSignal.timeout(15000)
         }
+      );
 
-        const data = await response.json();
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`API request failed: ${response.status} - ${JSON.stringify(errorData)}`);
+      }
+
+      const data = await response.json();
+      
+      const formattedResume = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 
+                             data?.text?.trim() || 
+                             rawText;
+
+      if (formattedResume === rawText || 
+          formattedResume.length < 100 || 
+          !formattedResume.includes('##') || 
+          !formattedResume.includes('•')) {
+        console.warn("Formatting failed validation checks, returning original");
+        return rawText;
+      }
+
+      return formattedResume
+        .replace(/\n\s*\n/g, '\n\n')
+        .replace(/\[.*?\]/g, '')
+        .trim();
         
-        // Enhanced response parsing with fallbacks
-        const formattedResume = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 
-                               data?.text?.trim() || 
-                               rawText;
-
-        // Output validation
-        if (formattedResume === rawText || 
-            formattedResume.length < 100 || 
-            !formattedResume.includes('##') || 
-            !formattedResume.includes('•')) {
-            console.warn("Formatting failed validation checks, returning original");
-            return rawText;
-        }
-
-        // Post-processing cleanup
-        return formattedResume
-            .replace(/\n\s*\n/g, '\n\n')  // Remove excessive newlines
-            .replace(/\[.*?\]/g, '')      // Remove any remaining placeholders
-            .trim();
-            
     } catch (error) {
-        console.error("Error formatting resume:", error.message);
-        return rawText;  // Fallback to original text
+      console.error("Error formatting resume:", error.message);
+      return rawText;
     }
-};
+  };
 
   const generateQuestions = async () => {
     if (!formattedResumeText) {
@@ -160,11 +172,19 @@ Formatted Resume (follow exact structure above):`;
 
     setLoading(true);
     try {
-      const prompt = `Generate exactly 20 interview questions for a final-year computer science student. Follow these rules:
+      const prompt = `Generate exactly 15 interview questions for a final-year computer science student. Follow these rules:
+
 1. First question MUST be: "Can you please introduce yourself?"
-2. Remaining 19 questions should be strictly based ONLY on:
-   - only Technical skills in resume where the programining langugaes question basic question only  okay
-   ${jobDescription ? `- Job requirements from: ${jobDescription}` : ''}
+2. Questions 2-8: Basic technical questions based ONLY on programming languages and technologies mentioned in the resume
+3. Questions 9-12: Project-based questions from the resume
+4. Questions 13-15: General behavioral questions for freshers
+${jobDescription ? `5. Include 2-3 questions related to: ${jobDescription}` : ''}
+
+IMPORTANT: 
+- Keep technical questions BASIC level (suitable for freshers)
+- Focus only on technologies explicitly mentioned in resume
+- No advanced system design or complex algorithms
+- Questions should be answerable by a final-year student
 
 Resume Text:
 ${formattedResumeText.substring(0, 3000)}...
@@ -178,7 +198,10 @@ Return ONLY a valid JSON array: ["question1", "question2", ...]`;
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }], role: "user" }],
-            generationConfig: { response_mime_type: "application/json" }
+            generationConfig: { 
+              response_mime_type: "application/json",
+              temperature: 0.3
+            }
           })
         }
       );
@@ -199,6 +222,13 @@ Return ONLY a valid JSON array: ["question1", "question2", ...]`;
       setQuestions(parsedQuestions);
       setCurrentQuestionIndex(0);
       setInterviewStarted(true);
+      setInterviewData([]);
+      
+      // Automatically speak the first question
+      setTimeout(() => {
+        speakText(parsedQuestions[0]);
+      }, 1000);
+      
     } catch (error) {
       console.error("Error generating questions:", error);
       alert("Failed to generate questions: " + error.message);
@@ -210,7 +240,7 @@ Return ONLY a valid JSON array: ["question1", "question2", ...]`;
   const fetchFeedback = async (answerText) => {
     if (currentQuestionIndex < 0 || currentQuestionIndex >= questions.length) return;
 
-    setLoading(true);
+    setIsProcessing(true);
     try {
       const question = questions[currentQuestionIndex];
       const prompt = `You're an interview coach for final-year CS students. Provide CONCISE feedback (max 3 sentences) on this answer, then give a 4-line better answer example.
@@ -245,19 +275,33 @@ Example Answer: [line1]\n[line2]\n[line3]\n[line4]`;
       const feedbackText = feedbackMatch ? feedbackMatch[1].trim() : "No feedback available";
       const exampleText = exampleMatch ? exampleMatch[1].trim() : "No example available";
 
-      setFeedback(`Feedback: ${feedbackText}\n\nBetter Answer:\n${exampleText}`);
+      const fullFeedback = `Feedback: ${feedbackText}\n\nBetter Answer:\n${exampleText}`;
+      setFeedback(fullFeedback);
+      
+      // Store interview data
+      const newInterviewEntry = {
+        questionNumber: currentQuestionIndex + 1,
+        question: question,
+        userAnswer: answerText,
+        feedback: fullFeedback,
+        timestamp: new Date().toLocaleString()
+      };
+      
+      setInterviewData(prev => [...prev, newInterviewEntry]);
+      
+      // Speak feedback
       speakText(feedbackText);
+      
     } catch (error) {
       console.error('Error fetching feedback:', error);
       setFeedback('Failed to get feedback. Please try the next question.');
     } finally {
-      setLoading(false);
+      setIsProcessing(false);
     }
   };
 
   const transcribeAudioWithGemini = async (audioBlob) => {
     try {
-      // Convert blob to base64
       const reader = new FileReader();
       reader.readAsDataURL(audioBlob);
       const base64Audio = await new Promise((resolve, reject) => {
@@ -297,9 +341,24 @@ Example Answer: [line1]\n[line2]\n[line3]\n[line4]`;
 
   const speakText = (text) => {
     if ('speechSynthesis' in window) {
+      // Stop any ongoing speech
+      window.speechSynthesis.cancel();
+      
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.0;
+      utterance.rate = 0.9;
       utterance.pitch = 1.0;
+      utterance.volume = 0.8;
+      
+      // Use a more natural voice if available
+      const voices = window.speechSynthesis.getVoices();
+      const preferredVoice = voices.find(voice => 
+        voice.lang.includes('en') && voice.name.includes('Google')
+      ) || voices.find(voice => voice.lang.includes('en'));
+      
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+      }
+      
       window.speechSynthesis.speak(utterance);
     }
   };
@@ -322,7 +381,7 @@ Example Answer: [line1]\n[line2]\n[line3]\n[line4]`;
       audioChunksRef.current = [];
       mediaRecorder.start();
       setRecording(true);
-      setFeedback(''); // Clear previous feedback
+      setFeedback('');
     } catch (err) {
       console.error('Error starting recording:', err);
       alert('Could not access microphone. Please check permissions.');
@@ -337,7 +396,7 @@ Example Answer: [line1]\n[line2]\n[line3]\n[line4]`;
   };
 
   const processAudio = async (audioBlob) => {
-    setLoading(true);
+    setIsProcessing(true);
     try {
       const transcript = await transcribeAudioWithGemini(audioBlob);
       setTranscript(transcript);
@@ -346,12 +405,12 @@ Example Answer: [line1]\n[line2]\n[line3]\n[line4]`;
         await fetchFeedback(transcript);
       } else {
         setFeedback('No speech detected. Please try again.');
-        setLoading(false);
+        setIsProcessing(false);
       }
     } catch (error) {
       console.error('Error processing audio:', error);
       setFeedback('Could not process audio. Please try speaking again.');
-      setLoading(false);
+      setIsProcessing(false);
     }
   };
 
@@ -360,6 +419,11 @@ Example Answer: [line1]\n[line2]\n[line3]\n[line4]`;
       setCurrentQuestionIndex(currentQuestionIndex + 1);
       setTranscript('');
       setFeedback('');
+      
+      // Automatically speak the next question
+      setTimeout(() => {
+        speakText(questions[currentQuestionIndex + 1]);
+      }, 500);
     } else {
       setInterviewCompleted(true);
     }
@@ -372,6 +436,82 @@ Example Answer: [line1]\n[line2]\n[line3]\n[line4]`;
     setQuestions([]);
     setTranscript('');
     setFeedback('');
+    setInterviewData([]);
+  };
+
+  const downloadInterviewReport = () => {
+    const doc = new jsPDF();
+    const pageHeight = doc.internal.pageSize.height;
+    let yPosition = 20;
+
+    // Title
+    doc.setFontSize(20);
+    doc.setFont(undefined, 'bold');
+    doc.text('AI Mock Interview Report', 20, yPosition);
+    yPosition += 15;
+
+    // Date
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'normal');
+    doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 20, yPosition);
+    yPosition += 10;
+
+    // Summary
+    doc.setFontSize(14);
+    doc.setFont(undefined, 'bold');
+    doc.text('Interview Summary:', 20, yPosition);
+    yPosition += 10;
+
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+    doc.text(`Total Questions: ${interviewData.length}`, 20, yPosition);
+    yPosition += 5;
+    doc.text(`Duration: Approximately ${interviewData.length * 3} minutes`, 20, yPosition);
+    yPosition += 15;
+
+    // Questions and Answers
+    interviewData.forEach((item, index) => {
+      // Check if we need a new page
+      if (yPosition > pageHeight - 60) {
+        doc.addPage();
+        yPosition = 20;
+      }
+
+      // Question
+      doc.setFontSize(12);
+      doc.setFont(undefined, 'bold');
+      doc.text(`Q${item.questionNumber}: ${item.question}`, 20, yPosition);
+      yPosition += 8;
+
+      // User Answer
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text('Your Answer:', 20, yPosition);
+      yPosition += 5;
+      
+      const answerLines = doc.splitTextToSize(item.userAnswer, 170);
+      doc.text(answerLines, 20, yPosition);
+      yPosition += answerLines.length * 4 + 5;
+
+      // Feedback
+      doc.setFont(undefined, 'bold');
+      doc.text('AI Feedback:', 20, yPosition);
+      yPosition += 5;
+      
+      doc.setFont(undefined, 'normal');
+      const feedbackLines = doc.splitTextToSize(item.feedback, 170);
+      doc.text(feedbackLines, 20, yPosition);
+      yPosition += feedbackLines.length * 4 + 10;
+
+      // Separator
+      if (index < interviewData.length - 1) {
+        doc.line(20, yPosition, 190, yPosition);
+        yPosition += 10;
+      }
+    });
+
+    // Save the PDF
+    doc.save(`AI_Interview_Report_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
   // Cleanup on unmount
@@ -380,253 +520,299 @@ Example Answer: [line1]\n[line2]\n[line3]\n[line4]`;
       if (mediaRecorderRef.current) {
         mediaRecorderRef.current.stream?.getTracks().forEach(track => track.stop());
       }
+      // Stop any ongoing speech
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
     };
   }, []);
 
+  // Auto-speak question when it changes
+  useEffect(() => {
+    if (interviewStarted && currentQuestionIndex >= 0 && questions[currentQuestionIndex]) {
+      const timer = setTimeout(() => {
+        speakText(questions[currentQuestionIndex]);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [currentQuestionIndex, interviewStarted, questions]);
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'Arial', maxWidth: '800px', margin: '0 auto' }}>
-      <h2 style={{ textAlign: 'center', marginBottom: '30px', color: '#2c3e50' }}>
-        AI Mock Interview Practice for Final Year Students
-      </h2>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 md:p-6">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-4">
+            🤖 AI Mock Interview Practice
+          </h1>
+          <p className="text-lg text-gray-600">
+            Prepare for your dream job with AI-powered interview simulation
+          </p>
+        </div>
 
-      {!interviewStarted ? (
-        <div style={{ background: '#f8f9fa', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-              Upload Resume (PDF): 
-            </label>
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              <input 
-                type="file" 
-                accept=".pdf" 
-                onChange={handleResumeUpload} 
-                style={{ flex: 1, padding: '8px' }}
-              />
-              {resumeText && (
-                <button 
-                  onClick={() => setShowResume(!showResume)}
-                  style={{ marginLeft: '10px', padding: '8px 15px', background: '#3498db', color: 'white', border: 'none', borderRadius: '4px' }}
-                >
-                  {showResume ? 'Hide Resume' : 'View Resume'}
-                </button>
+        {!interviewStarted ? (
+          /* Setup Phase */
+          <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8">
+            {/* Resume Upload */}
+            <div className="mb-8">
+              <label className="flex items-center text-lg font-semibold text-gray-700 mb-4">
+                <Upload className="w-5 h-5 mr-2" />
+                Upload Resume (PDF)
+              </label>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <input 
+                  type="file" 
+                  accept=".pdf" 
+                  onChange={handleResumeUpload} 
+                  className="flex-1 p-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 transition-colors"
+                />
+                {resumeText && (
+                  <button 
+                    onClick={() => setShowResume(!showResume)}
+                    className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                  >
+                    {showResume ? <EyeOff className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
+                    {showResume ? 'Hide' : 'View'} Resume
+                  </button>
+                )}
+              </div>
+              {fileName && (
+                <p className="mt-2 text-sm text-green-600 flex items-center">
+                  <CheckCircle className="w-4 h-4 mr-1" />
+                  Uploaded: {fileName}
+                </p>
               )}
             </div>
-            {fileName && <p style={{ marginTop: '8px', fontSize: '14px' }}>Uploaded: {fileName}</p>}
-          </div>
 
-          {showResume && resumeText && (
-  <div className="mb-6 border border-gray-200 rounded-lg shadow-sm p-4 max-h-96 overflow-y-auto bg-white">
-    <div className="flex justify-between items-center mb-3">
-      <h3 className="text-lg font-semibold text-gray-800">Formatted Resume</h3>
-      <button 
-        onClick={() => navigator.clipboard.writeText(formattedResumeText)}
-        className="text-sm px-3 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
-        title="Copy to clipboard"
-      >
-        Copy
-      </button>
-    </div>
-    <div className="font-mono text-sm leading-relaxed text-gray-700 p-3 bg-gray-50 rounded">
-      <pre className="whitespace-pre-wrap break-words">
-        {formattedResumeText}
-      </pre>
-    </div>
-    <div className="mt-2 text-xs text-gray-500 flex justify-between">
-      <span>{formattedResumeText?.length || 0} characters</span>
-      <span>Scroll to view full content</span>
-    </div>
-  </div>
-)}
+            {/* Resume Preview */}
+            {showResume && resumeText && (
+              <div className="mb-8 border border-gray-200 rounded-lg shadow-sm p-4 max-h-96 overflow-y-auto bg-gray-50">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                    <FileText className="w-5 h-5 mr-2" />
+                    Formatted Resume
+                  </h3>
+                  <button 
+                    onClick={() => navigator.clipboard.writeText(formattedResumeText)}
+                    className="text-sm px-3 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
+                    title="Copy to clipboard"
+                  >
+                    Copy
+                  </button>
+                </div>
+                <div className="font-mono text-sm leading-relaxed text-gray-700 p-3 bg-white rounded">
+                  <pre className="whitespace-pre-wrap break-words">
+                    {formattedResumeText}
+                  </pre>
+                </div>
+              </div>
+            )}
 
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-              Job Description (Optional):
-            </label>
-            <textarea
-              value={jobDescription}
-              onChange={(e) => setJobDescription(e.target.value)}
-              rows={4}
-              style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '5px' }}
-              placeholder="Paste job description here..."
-            />
-          </div>
+            {/* Job Description */}
+            <div className="mb-8">
+              <label className="block text-lg font-semibold text-gray-700 mb-4">
+                Job Description (Optional)
+              </label>
+              <textarea
+                value={jobDescription}
+                onChange={(e) => setJobDescription(e.target.value)}
+                rows={4}
+                className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                placeholder="Paste the job description here to get more targeted questions..."
+              />
+            </div>
 
-          <div style={{ textAlign: 'center' }}>
-            <button
-              onClick={generateQuestions}
-              disabled={!resumeText || loading}
-              style={{
-                padding: '12px 30px',
-                fontSize: '16px',
-                background: '#27ae60',
-                color: 'white',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer',
-                transition: 'background 0.3s',
-                opacity: (!resumeText || loading) ? 0.7 : 1
-              }}
-            >
-              {loading ? (
-                <span>
-                  <i className="fa fa-spinner fa-spin" style={{ marginRight: '8px' }}></i>
-                  Generating Questions...
-                </span>
-              ) : 'Start Interview'}
-            </button>
-          </div>
-        </div>
-      ) : interviewCompleted ? (
-        <div style={{ textAlign: 'center', padding: '40px 20px', background: '#e8f5e9', borderRadius: '10px' }}>
-          <h3 style={{ color: '#27ae60' }}>🎉 Interview Completed! 🎉</h3>
-          <p>You've successfully answered all {questions.length} questions.</p>
-          <button 
-            onClick={resetInterview}
-            style={{
-              padding: '12px 30px',
-              fontSize: '16px',
-              background: '#3498db',
-              color: 'white',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: 'pointer',
-              marginTop: '20px'
-            }}
-          >
-            Start New Interview
-          </button>
-        </div>
-      ) : (
-        <div style={{ background: '#fff', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }}>
-          <div style={{ marginBottom: '25px', padding: '20px', background: '#f0f7ff', borderRadius: '8px', borderLeft: '4px solid #3498db' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h3 style={{ margin: 0 }}>Question {currentQuestionIndex + 1} of {questions.length}</h3>
+            {/* Start Button */}
+            <div className="text-center">
               <button
-                onClick={() => speakText(questions[currentQuestionIndex])}
-                style={{ padding: '5px 10px', background: '#3498db', color: 'white', border: 'none', borderRadius: '4px' }}
+                onClick={generateQuestions}
+                disabled={!resumeText || loading}
+                className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105"
               >
-                Repeat Question
+                {loading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Generating Questions...
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-5 h-5 mr-2" />
+                    Start AI Interview
+                  </>
+                )}
               </button>
             </div>
-            <p style={{ fontSize: '18px', fontWeight: '500', margin: 0 }}>
-              {questions[currentQuestionIndex]}
-            </p>
           </div>
+        ) : interviewCompleted ? (
+          /* Completion Phase */
+          <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8 text-center">
+            <div className="mb-6">
+              <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
+              <h2 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2">
+                🎉 Interview Completed!
+              </h2>
+              <p className="text-lg text-gray-600">
+                You've successfully answered all {questions.length} questions.
+              </p>
+            </div>
 
-          <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-            <button
-              onClick={recording ? handleStopRecording : handleStartRecording}
-              disabled={loading}
-              style={{
-                padding: '12px 30px',
-                fontSize: '16px',
-                background: recording ? '#e74c3c' : '#2ecc71',
-                color: 'white',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer',
-                transition: 'background 0.3s',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto',
-                minWidth: '200px'
-              }}
-            >
-              {recording ? (
-                <>
-                  <div style={{ 
-                    width: '12px', 
-                    height: '12px', 
-                    background: '#fff', 
-                    borderRadius: '50%', 
-                    marginRight: '8px',
-                    animation: 'pulse 1.5s infinite'
-                  }}></div>
-                  Stop Recording
-                </>
-              ) : (
-                'Start Recording Answer'
-              )}
-            </button>
-            <style>{`
-              @keyframes pulse {
-                0% { opacity: 1; }
-                50% { opacity: 0.5; }
-                100% { opacity: 1; }
-              }
-            `}</style>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <button 
+                onClick={downloadInterviewReport}
+                className="inline-flex items-center px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors"
+              >
+                <Download className="w-5 h-5 mr-2" />
+                Download Report (PDF)
+              </button>
+              <button 
+                onClick={resetInterview}
+                className="inline-flex items-center px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <RotateCcw className="w-5 h-5 mr-2" />
+                Start New Interview
+              </button>
+            </div>
           </div>
-
-          {loading && !feedback && (
-            <div style={{ textAlign: 'center', margin: '20px 0' }}>
-              <div style={{ 
-                display: 'inline-block', 
-                padding: '15px 20px', 
-                background: '#f0f7ff', 
-                borderRadius: '8px',
-                fontWeight: '500'
-              }}>
-                Processing your answer...
+        ) : (
+          /* Interview Phase */
+          <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8">
+            {/* Progress Bar */}
+            <div className="mb-6">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-medium text-gray-700">
+                  Question {currentQuestionIndex + 1} of {questions.length}
+                </span>
+                <span className="text-sm text-gray-500">
+                  {Math.round(((currentQuestionIndex + 1) / questions.length) * 100)}% Complete
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div 
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${((currentQuestionIndex + 1) / questions.length) * 100}%` }}
+                ></div>
               </div>
             </div>
-          )}
 
-          {transcript && !feedback && (
-            <div style={{ marginTop: '20px', padding: '15px', background: '#f8f9fa', borderRadius: '8px' }}>
-              <h4 style={{ marginTop: 0, marginBottom: '10px' }}>Your Answer:</h4>
-              <p style={{ margin: 0, lineHeight: '1.6' }}>{transcript}</p>
-            </div>
-          )}
-
-          {feedback && (
-            <div style={{ marginTop: '30px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                <h4 style={{ margin: 0 }}>AI Feedback:</h4>
+            {/* Current Question */}
+            <div className="mb-8 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border-l-4 border-blue-500">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-xl font-semibold text-gray-800">
+                  Question {currentQuestionIndex + 1}
+                </h3>
                 <button
-                  onClick={() => speakText(feedback)}
-                  style={{ padding: '8px 15px', background: '#3498db', color: 'white', border: 'none', borderRadius: '4px' }}
+                  onClick={() => speakText(questions[currentQuestionIndex])}
+                  className="flex items-center px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                  title="Repeat Question"
                 >
-                  Read Feedback
+                  <Volume2 className="w-4 h-4 mr-1" />
+                  Speak
                 </button>
               </div>
-              <div style={{
-                padding: '20px',
-                background: '#e8f5e9',
-                borderRadius: '8px',
-                whiteSpace: 'pre-wrap',
-                lineHeight: '1.6',
-                borderLeft: '4px solid #2ecc71'
-              }}>
-                {feedback}
-              </div>
-
-              <div style={{ textAlign: 'center', marginTop: '25px' }}>
-                <button
-                  onClick={handleNextQuestion}
-                  disabled={loading}
-                  style={{
-                    padding: '12px 30px',
-                    fontSize: '16px',
-                    background: '#3498db',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '5px',
-                    cursor: 'pointer',
-                    transition: 'background 0.3s',
-                    opacity: loading ? 0.7 : 1
-                  }}
-                >
-                  {currentQuestionIndex < questions.length - 1 ? 'Next Question →' : 'Finish Interview'}
-                </button>
-              </div>
+              <p className="text-lg text-gray-700 leading-relaxed">
+                {questions[currentQuestionIndex]}
+              </p>
             </div>
-          )}
-        </div>
-      )}
+
+            {/* Recording Controls */}
+            <div className="text-center mb-8">
+              <button
+                onClick={recording ? handleStopRecording : handleStartRecording}
+                disabled={isProcessing}
+                className={`inline-flex items-center px-8 py-4 font-semibold rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 ${
+                  recording 
+                    ? 'bg-red-500 hover:bg-red-600 text-white' 
+                    : 'bg-green-500 hover:bg-green-600 text-white'
+                } disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none`}
+              >
+                {recording ? (
+                  <>
+                    <MicOff className="w-5 h-5 mr-2" />
+                    <span className="flex items-center">
+                      <span className="w-2 h-2 bg-white rounded-full mr-2 animate-pulse"></span>
+                      Stop Recording
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Mic className="w-5 h-5 mr-2" />
+                    Start Recording Answer
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Processing Indicator */}
+            {isProcessing && (
+              <div className="text-center mb-6">
+                <div className="inline-flex items-center px-6 py-3 bg-blue-50 rounded-lg">
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin text-blue-600" />
+                  <span className="text-blue-700 font-medium">Processing your answer...</span>
+                </div>
+              </div>
+            )}
+
+            {/* User Answer */}
+            {transcript && (
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
+                <h4 className="font-semibold text-gray-800 mb-2 flex items-center">
+                  <Mic className="w-4 h-4 mr-2" />
+                  Your Answer:
+                </h4>
+                <p className="text-gray-700 leading-relaxed">{transcript}</p>
+              </div>
+            )}
+
+            {/* AI Feedback */}
+            {feedback && (
+              <div className="mb-8">
+                <div className="flex justify-between items-center mb-4">
+                  <h4 className="font-semibold text-gray-800 flex items-center">
+                    🤖 AI Feedback:
+                  </h4>
+                  <button
+                    onClick={() => speakText(feedback)}
+                    className="flex items-center px-3 py-1 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
+                  >
+                    <Volume2 className="w-4 h-4 mr-1" />
+                    Listen
+                  </button>
+                </div>
+                <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <pre className="whitespace-pre-wrap text-gray-700 leading-relaxed font-sans">
+                    {feedback}
+                  </pre>
+                </div>
+
+                {/* Next Question Button */}
+                <div className="text-center mt-6">
+                  <button
+                    onClick={handleNextQuestion}
+                    disabled={isProcessing}
+                    className="inline-flex items-center px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {currentQuestionIndex < questions.length - 1 ? (
+                      <>
+                        Next Question
+                        <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Finish Interview
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.worker.min.js" />
-      
+      </div>
     </div>
   );
 };
