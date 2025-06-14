@@ -301,7 +301,9 @@ export default function Dashboard() {
                     >
                       {slot.time}
                       {status === 'expired' && <span className="expired-label">Expired</span>}
+                      }
                       {status === 'booked' && <span className="booked-label">Booked</span>}
+                      }
                     </button>
                   );
                 })}
@@ -315,7 +317,9 @@ export default function Dashboard() {
                 {loading ? 'Processing...' : `Pay ₹49 for ${selectedSlot}`}
               </button>
               {error && <p className="error">{error}</p>}
+              }
               {success && <p className="success">{success}</p>}
+              }
             </div>
           )}
         </div>
