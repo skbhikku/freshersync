@@ -229,8 +229,8 @@ export default function Dashboard() {
             
             {/* Navigation Links */}
             <div className={`nav-links ${mobileMenuOpen ? 'open' : ''}`}>
-              <a href="#booking" onClick={() => setMobileMenuOpen(false)}>
-                
+              <a href="/ai interview" onClick={() => setMobileMenuOpen(false)}>
+                AI Interview
               </a>
               <a href="#booked-slots" onClick={() => setMobileMenuOpen(false)}>
                 
