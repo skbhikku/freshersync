@@ -176,6 +176,7 @@
   padding: var(--space-6);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
+  margin-bottom: 10px;
 }
 
 /* ====== Calendar Section ====== */
