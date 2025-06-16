@@ -10,7 +10,7 @@ import TermsConditions from './components/TermsConditions';
 import RefundPolicy from './components/RefundPolicy';
 import Interview from './components/Interview';
 import Navbar from './components/Navbar';
-import Placement from './components/Placement';
+import Placement from './components/Placements';
 
 function App() {
   return (
