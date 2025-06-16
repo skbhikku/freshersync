@@ -22,7 +22,6 @@ import {
   ComputerDesktopIcon
 } from '@heroicons/react/24/outline';
 import '../styles/HomePage.css'
-
 const HomePage = () => {
   const [slots, setSlots] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -223,7 +222,7 @@ const HomePage = () => {
                 onClick={() => setShowRegisterModal(true)}
                 className="btn-primary text-sm px-4 py-2"
               >
-                Register Now
+                Register
               </button>
             </div>
           </div>
