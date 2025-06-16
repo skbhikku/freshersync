@@ -36,7 +36,7 @@ export default function Login({ onClose }) {
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('user', JSON.stringify(res.data.user));
       onClose();
-      navigate('/dashboard');
+      navigate('/navbar/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed');
     } finally {
@@ -122,7 +122,6 @@ export default function Login({ onClose }) {
             </div>
           )}
         </button>
-
         {error && (
           <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
             <p className="text-sm text-red-600 flex items-center">
@@ -131,22 +130,6 @@ export default function Login({ onClose }) {
             </p>
           </div>
         )}
-
-        <div className="text-center pt-4">
-          <p className="text-sm text-slate-600">
-            Don't have an account?{' '}
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                // You can trigger register modal here if needed
-              }}
-              className="text-blue-600 hover:text-blue-800 font-semibold underline"
-            >
-              Sign up now
-            </button>
-          </p>
-        </div>
       </form>
     </div>
   );
