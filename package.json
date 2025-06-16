@@ -15,7 +15,6 @@
     "autoprefixer": "^10.4.16",
     "axios": "^1.9.0",
     "date-fns": "^4.1.0",
-    "jspdf": "^2.5.1",
     "lucide-react": "^0.511.0",
     "postcss": "^8.4.32",
     "react": "^19.1.0",
