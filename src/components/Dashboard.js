@@ -125,7 +125,7 @@ export default function Dashboard() {
       const razorpayLoaded = await loadRazorpay();
       if (!razorpayLoaded) throw new Error('Razorpay failed to load');
 
-      const amount = 49 * 100; // ₹49 in paise
+      const amount = 49 ; // ₹49 in paise
       const { data: order } = await createOrder(amount);
 
       const options = {
