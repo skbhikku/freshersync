@@ -397,65 +397,90 @@ Example: [line1]\n[line2]\n[line3]\n[line4]`;
     }
   };
 
-  const transcribeAudioWithGemini = async (audioBlob) => {
-    try {
-      if (!audioBlob) return '';
-      const reader = new FileReader();
-      reader.readAsDataURL(audioBlob);
-      const base64Audio = await new Promise((resolve, reject) => {
-        reader.onload = () => {
-          const result = reader.result || '';
-          const split = String(result).split(',');
-          resolve(split[1] || '');
-        };
-        reader.onerror = reject;
-      });
+const transcribeAudioWithGemini = async (audioBlob) => {
+  try {
+    if (!audioBlob) return '';
 
-      if (!base64Audio) {
-        console.warn('Empty base64 audio');
-        return '';
-      }
-
-      if (!GEMINI_API_KEY) {
-        console.warn('Missing GEMINI API KEY - transcription skipped');
-        return '';
-      }
-
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({
-            contents: [
-              { parts: [{ text: "Transcribe the following audio. Return only the transcribed text without any additional commentary." }] },
-              {
-                parts: [{
-                  inlineData: {
-                    mimeType: 'audio/webm',
-                    data: base64Audio
-                  }
-                }]
-              }
-            ]
-          })
-        }
-      );
-
-      if (!response.ok) {
-        const err = await response.text().catch(() => '');
-        console.warn('Transcription API returned non-ok:', err);
-        return '';
-      }
-
-      const data = await response.json().catch(() => ({}));
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      return text;
-    } catch (error) {
-      console.error('Transcription error:', error);
+    // quick guard: require at least ~0.5s of audio (size heuristic)
+    if (audioBlob.size < 1000) {
+      console.warn('Audio too small:', audioBlob.size);
       return '';
     }
-  };
+
+    // convert to base64
+    const base64Audio = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result || '';
+        const parts = String(result).split(',');
+        resolve(parts[1] || '');
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(audioBlob);
+    });
+
+    if (!base64Audio) {
+      console.warn('Empty base64 audio');
+      return '';
+    }
+
+    if (!GEMINI_API_KEY) {
+      console.warn('Missing GEMINI_API_KEY');
+      return '';
+    }
+
+    // choose a model that is known to support inline audio for transcription
+    const model = 'gemini-1.5-flash';
+    const url = `https://generativelanguage.googleapis.com/v1beta1/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+
+    // build payload: single contents item with role + parts (instruction + audio inline)
+    const payload = {
+      contents: [
+        {
+          role: "user",
+          parts: [
+            // instruction (human-readable)
+            { text: "Transcribe this audio. Return only the transcribed plain text with no commentary." },
+            // inline audio data
+            {
+              inlineData: {
+                mimeType: audioBlob.type || "audio/webm",
+                data: base64Audio
+              }
+            }
+          ]
+        }
+      ]
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    // helpful debug: if not ok, print body for inspection
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      console.warn('Transcription API error', response.status, text);
+      return '';
+    }
+
+    const data = await response.json().catch(() => ({}));
+
+    // Debug log the raw response once while developing:
+    // console.log('transcription response:', data);
+
+    // pick the first candidate text (defensive)
+    const transcript = data?.candidates?.[0]?.content?.parts?.find(p => typeof p.text === 'string')?.text || '';
+
+    return (transcript || '').trim();
+  } catch (err) {
+    console.error('Transcription error:', err);
+    return '';
+  }
+};
+
 
   const handleStartRecording = async () => {
     try {
