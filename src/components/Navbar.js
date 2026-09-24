@@ -49,7 +49,7 @@ export default function Navbar() {
       <nav className="navbar">
         <div className="navbar-container">
           <div className="navbar-brand">
-            fresher<span>Sync</span>
+            AI Audio<span>Mock Interview</span>
           </div>
           
           <div className="navbar-menu">
