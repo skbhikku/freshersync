@@ -8,11 +8,14 @@ export const registerUser = async (userData) =>
   await axios.post(`${API_URL}/register`, userData);
 
 
-export const verifyOtp = async (email, code) =>
-  await axios.post(`${API_URL}/verify-otp`, {
+
+export const verifyOtp = async (email, otpCode) => {
+  return axios.post(`${API_URL}/verify-otp`, {
     email: email,
-    otp: code
+    otp: otpCode
   });
+};
+
 
 export const getAvailableSlots = async () =>
   await axios.get(`${API_URL}/slotsavailable`);
