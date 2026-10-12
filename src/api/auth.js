@@ -7,8 +7,12 @@ const API = process.env.REACT_APP_API_BASE_URL;
 export const registerUser = async (userData) =>
   await axios.post(`${API_URL}/register`, userData);
 
+
 export const verifyOtp = async (email, code) =>
-  await axios.post(`${API_URL}/verify-otp`, { email, otp:code });
+  await axios.post(`${API_URL}/verify-otp`, {
+    email: email,
+    otp: code
+  });
 
 export const getAvailableSlots = async () =>
   await axios.get(`${API_URL}/slotsavailable`);
