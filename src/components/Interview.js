@@ -1,900 +1,631 @@
-/* eslint-disable no-unused-vars */
-import React, { useState, useRef, useEffect } from 'react';
-import { extractTextFromPDF } from './resumeAnalysis';
-import { Worker } from '@react-pdf-viewer/core';
 
-const Interview = () => {
-  const [recording, setRecording] = useState(false);
-  const [transcript, setTranscript] = useState('');
-  const [feedback, setFeedback] = useState('');
-  const [resumeText, setResumeText] = useState('');
-  const [formattedResumeText, setFormattedResumeText] = useState('');
-  const [fileName, setFileName] = useState('');
-  const [jobDescription, setJobDescription] = useState('');
-  const [questions, setQuestions] = useState([]);
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(-1);
-  const [interviewStarted, setInterviewStarted] = useState(false);
-  const [interviewCompleted, setInterviewCompleted] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [showResume, setShowResume] = useState(false);
-  const [readingFeedback, setReadingFeedback] = useState(false);
-  const [feedbackProgress, setFeedbackProgress] = useState(0);
+import React, { useEffect, useRef, useState } from "react";
+import { extractTextFromPDF } from "./resumeAnalysis";
 
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
-  const speechSynthesisRef = useRef(null);
-  const progressIntervalRef = useRef(null);
-  const GEMINI_API_KEY = process.env.REACT_APP_GEMINI_API_KEY;
+const GEMINI_MODEL = "gemini-3.8-flash";
+const GEMINI_API_KEY = process.env.REACT_APP_GEMINI_API_KEY;
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      try {
-        if (window.speechSynthesis) window.speechSynthesis.cancel();
-      } catch (e) {}
-      try {
-        if (mediaRecorderRef.current) {
-          mediaRecorderRef.current.stream?.getTracks().forEach(track => track.stop());
-        }
-      } catch (e) {}
-      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
-    };
-  }, []);
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
-  // Speak question when it changes
-  useEffect(() => {
-    if (questions.length > 0 && currentQuestionIndex >= 0 && interviewStarted) {
-      const q = questions[currentQuestionIndex];
-      if (q) speakQuestion(q);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentQuestionIndex, questions, interviewStarted]);
+async function askGemini(prompt) {
+  if (!GEMINI_API_KEY) {
+    throw new Error(
+      "Gemini API key is missing. Add REACT_APP_GEMINI_API_KEY to your .env file."
+    );
+  }
 
-  const startProgressAnimation = (duration) => {
-    setFeedbackProgress(0);
-    setReadingFeedback(true);
-    const startTime = Date.now();
-
-    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
-
-    progressIntervalRef.current = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min((elapsed / Math.max(duration, 1)) * 100, 100);
-      setFeedbackProgress(progress);
-
-      if (progress >= 100) {
-        clearInterval(progressIntervalRef.current);
-        setReadingFeedback(false);
-        setFeedbackProgress(0);
-      }
-    }, 50);
-  };
-
-  const speakQuestion = (question) => {
-    if (!question) return;
-    if (!('speechSynthesis' in window)) return;
-    try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(question);
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
-      speechSynthesisRef.current = utterance;
-      window.speechSynthesis.speak(utterance);
-    } catch (e) {
-      console.warn('SpeechSynthesis error', e);
-    }
-  };
-
-  const speakText = (text) => {
-    if (!text) return;
-    if (!('speechSynthesis' in window)) return;
-    try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
-
-      // Estimate duration roughly (words / 2.25 words/sec)
-      const words = text.split(/\s+/).filter(Boolean).length;
-      const estimatedDuration = (words / 2.25) * 1000;
-
-      utterance.onstart = () => startProgressAnimation(estimatedDuration);
-      utterance.onend = () => {
-        setReadingFeedback(false);
-        setFeedbackProgress(0);
-        if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
-      };
-
-      speechSynthesisRef.current = utterance;
-      window.speechSynthesis.speak(utterance);
-    } catch (e) {
-      console.warn('speakText error', e);
-    }
-  };
-
-  const handleResumeUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file || file.type !== 'application/pdf') {
-      alert('Please upload a valid PDF file.');
-      return;
-    }
-
-    setFileName(file.name);
-    try {
-      setLoading(true);
-      const rawText = await extractTextFromPDF(file);
-      setResumeText(rawText || '');
-
-      const formatted = await formatResume(rawText || '');
-      setFormattedResumeText(formatted || rawText || '');
-    } catch (error) {
-      console.error('Error processing resume:', error);
-      alert('Failed to process resume.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const formatResume = async (rawText) => {
-    if (!rawText || typeof rawText !== 'string' || rawText.trim().length === 0) {
-      console.error("Invalid rawText provided");
-      return rawText;
-    }
-
-    const maxLength = 3000;
-    const truncatedText = rawText.length > maxLength
-      ? rawText.substring(0, maxLength) + "... [truncated for length]"
-      : rawText;
-
-    if (!GEMINI_API_KEY) {
-      console.warn('No GEMINI_API_KEY provided — skipping remote formatting.');
-      return truncatedText;
-    }
-
-    try {
-      const prompt = `You are a professional resume writer. Transform the following resume text into a perfectly formatted, professional resume. Follow these rules STRICTLY:
-
-1. STRUCTURE:
-   - Header (Name, Contact Info, Links)
-   - Professional Summary (3-4 lines max)
-   - Education (Institution, Degree, GPA, Relevant Courses)
-   - Technical Skills (Grouped by category in a clean table)
-   - Projects (Name, Tech Used, 3 bullet points with metrics)
-   - Achievements/Awards (If any exist)
-   - Keep all original information
-
-2. FORMATTING:
-   - Use consistent bullet points (•)
-   - Bold section headers (## Header)
-   - Italicize job titles/dates
-   - Skills in a table format
-   - Empty line between sections
-   - No extra blank spaces
-
-3. WRITING STYLE:
-   - Start bullet points with strong action verbs
-   - Include quantifiable achievements
-   - Keep language professional but concise
-   - Remove any placeholder text like [Graduation Date]
-
-Raw Resume Text:
-${truncatedText}
-
-Formatted Resume (follow exact structure above):`;
-
-      // Simple fetch without AbortSignal.timeout (not widely supported)
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }], role: "user" }],
-            generationConfig: {
-              temperature: 0.2,
-              topP: 0.7,
-              topK: 30,
-              maxOutputTokens: 2000
-            }
-          })
-        }
-      );
-
-      if (!res.ok) {
-        const err = await res.text().catch(() => '');
-        throw new Error(`API request failed: ${res.status} ${err}`);
-      }
-
-      const data = await res.json().catch(() => ({}));
-      const formattedResume = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
-        || data?.text?.trim()
-        || truncatedText;
-
-      if (formattedResume === truncatedText || formattedResume.length < 100 || !formattedResume.includes('##') || !formattedResume.includes('•')) {
-        console.warn("Formatting failed validation checks, returning original/truncated text");
-        return truncatedText;
-      }
-
-      return formattedResume
-        .replace(/\n\s*\n/g, '\n\n')
-        .replace(/\[.*?\]/g, '')
-        .trim();
-    } catch (error) {
-      console.error("Error formatting resume:", error?.message || error);
-      return truncatedText;
-    }
-  };
-
-  const generateQuestions = async () => {
-    if (!formattedResumeText) {
-      alert("Please upload your resume first");
-      return;
-    }
-
-    if (!GEMINI_API_KEY) {
-      alert("Missing API key (REACT_APP_GEMINI_API_KEY). Questions generation skipped.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const prompt = `Generate exactly 20 interview questions for a final-year student. Follow these rules:
-1. First question MUST be: "Can you please introduce yourself?"
-2. Remaining 19 questions should be strictly based ONLY on:
-   - Only include technical skills in the resume. Ask basic questions related to programming languages only simple questions.
-   ${jobDescription ? `- Job requirements from: ${jobDescription}` : ''}
-
-Resume Text:
-${formattedResumeText.substring(0, 5000)}...
-
-Return ONLY a valid JSON array: ["question1", "question2", ...]`;
-
-     const response = await fetch(
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-  {
+  const response = await fetch(GEMINI_URL, {
     method: "POST",
-    headers: { 
-      "Content-Type": "application/json"
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": GEMINI_API_KEY,
     },
     body: JSON.stringify({
       contents: [
         {
           role: "user",
-          parts: [{ text: prompt }]
-        }
+          parts: [{ text: prompt }],
+        },
       ],
-      generation_config: {
-        response_mime_type: "application/json"
-      }
-    })
+      generationConfig: {
+        temperature: 0.4,
+      },
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error?.message || `Gemini API error (${response.status})`
+    );
   }
-);
 
+  const text = data?.candidates?.[0]?.content?.parts
+    ?.map((part) => part.text || "")
+    .join("")
+    .trim();
 
-      if (!response.ok) {
-        const errText = await response.text().catch(() => '');
-        throw new Error(`Server error: ${response.status} ${errText}`);
+  if (!text) {
+    throw new Error("Gemini returned an empty response. Please try again.");
+  }
+
+  return text;
+}
+
+function parseQuestions(responseText) {
+  const cleaned = responseText
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .trim();
+
+  const start = cleaned.indexOf("[");
+  const end = cleaned.lastIndexOf("]");
+
+  if (start === -1 || end === -1) {
+    throw new Error("Gemini did not return a valid question list.");
+  }
+
+  const parsed = JSON.parse(cleaned.slice(start, end + 1));
+
+  const questions = parsed
+    .map((item) =>
+      typeof item === "string" ? item.trim() : item?.question?.trim()
+    )
+    .filter(Boolean);
+
+  if (questions.length === 0) {
+    throw new Error("No interview questions were generated.");
+  }
+
+  // Keep the introduction first and exactly 20 questions.
+  const intro = "Can you please introduce yourself?";
+  const remaining = questions.filter(
+    (question) => question.toLowerCase() !== intro.toLowerCase()
+  );
+
+  return [intro, ...remaining].slice(0, 20);
+}
+
+export default function Interview() {
+  const [resumeFile, setResumeFile] = useState(null);
+  const [resumeText, setResumeText] = useState("");
+  const [formattedResume, setFormattedResume] = useState("");
+  const [jobDescription, setJobDescription] = useState("");
+
+  const [questions, setQuestions] = useState([]);
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const [transcript, setTranscript] = useState("");
+  const [feedback, setFeedback] = useState("");
+
+  const [recording, setRecording] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
+
+  const recognitionRef = useRef(null);
+  const finalTranscriptRef = useRef("");
+  const shouldProcessRef = useRef(false);
+  const recordingRef = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      shouldProcessRef.current = false;
+
+      if (recognitionRef.current) {
+        recognitionRef.current.onend = null;
+        try {
+          recognitionRef.current.abort();
+        } catch {
+          // Recognition may already have stopped.
+        }
       }
 
-      const data = await response.json().catch(() => ({}));
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-      const match = text.match(/\[[\s\S]*\]/);
-      if (!match) throw new Error('No questions array found in the model response');
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
 
-      const parsedQuestions = JSON.parse(match[0]);
-      if (!Array.isArray(parsedQuestions)) throw new Error('Invalid questions format from model');
+  const currentQuestion = questions[questionIndex] || "";
 
-      setQuestions(parsedQuestions);
-      setCurrentQuestionIndex(0);
-      setInterviewStarted(true);
-      setInterviewCompleted(false);
-    } catch (error) {
-      console.error("Error generating questions:", error);
-      alert("Failed to generate questions: " + (error?.message || error));
-    } finally {
-      setLoading(false);
-    }
+  const handleResumeChange = (event) => {
+    setResumeFile(event.target.files?.[0] || null);
+    setResumeText("");
+    setFormattedResume("");
+    setQuestions([]);
+    setQuestionIndex(0);
+    setTranscript("");
+    setFeedback("");
+    setError("");
+    setStatus("");
   };
 
-  const fetchFeedback = async (answerText) => {
-    if (currentQuestionIndex < 0 || currentQuestionIndex >= questions.length) return;
+  const handlePrepareInterview = async () => {
+    if (!resumeFile) {
+      setError("Please upload your resume PDF first.");
+      return;
+    }
 
     setLoading(true);
+    setError("");
+    setStatus("Reading your resume...");
+    setFormattedResume("");
+    setQuestions([]);
+    setFeedback("");
+    setTranscript("");
+
     try {
-      const question = questions[currentQuestionIndex];
-      const isTechnical = /(how|what|explain|define|difference between|algorithm|code|programming|technology)/i.test(question);
+      const extracted = await extractTextFromPDF(resumeFile);
+      const text =
+        typeof extracted === "string"
+          ? extracted
+          : extracted?.text || extracted?.content || "";
 
-      const prompt = `You're a friendly career coach evaluating interview answers. Provide:
-1. Score (1-10) based on:
-   - Technical accuracy (if technical question)
-   - Clarity and structure
-   - Relevance to resume
-   - Confidence demonstrated
-2.${isTechnical ? " Simple explanation of the concept\n" : ""}
-3. Constructive feedback (max 3 sentences)
-4. Better answer example (4 lines)
-
-SCORING GUIDE:
-9-10 = Excellent (complete, accurate, well-structured)
-7-8 = Good (minor improvements needed)
-5-6 = Average (needs more depth/structure)
-1-4 = Needs work (incomplete/unclear)
-
-Question: ${question}
-Answer: ${answerText}
-Resume Context: ${formattedResumeText.substring(0, 300)}...
-${jobDescription ? `Job Requirements: ${jobDescription.substring(0, 200)}...` : ''}
-
-Respond in EXACTLY this format:
-Score: [X]/10
-${isTechnical ? "Concept: [2-line explanation]\n" : ""}Feedback: [your feedback]
-Example: [line1]\n[line2]\n[line3]\n[line4]`;
-
-      if (!GEMINI_API_KEY) {
-        throw new Error('Missing API key for feedback generation');
+      if (!text.trim()) {
+        throw new Error(
+          "Could not extract text from this PDF. Please try another PDF."
+        );
       }
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }], role: "user" }],
-            generationConfig: { temperature: 0.3 }
-          })
-        }
-      );
+      setResumeText(text);
 
-      if (!response.ok) {
-        const err = await response.text().catch(() => '');
-        throw new Error(`Feedback API error: ${response.status} ${err}`);
+      setStatus("Formatting your resume...");
+      const formatted = await askGemini(`
+You are a professional resume reviewer.
+Clean up and organize the resume text below.
+Preserve the candidate's actual facts, education, skills, dates and experience.
+Do not invent information.
+Return readable plain text with clear headings.
+
+RESUME:
+${text}
+`);
+
+      setFormattedResume(formatted);
+
+      setStatus("Generating 20 interview questions...");
+      const response = await askGemini(`
+Create exactly 20 interview questions for a mock interview using this resume.
+${jobDescription.trim()
+  ? `Use this job description to tailor the questions:\n${jobDescription}`
+  : "Tailor questions to the candidate's resume, skills, projects and education."}
+
+Rules:
+- Question 1 must be exactly: "Can you please introduce yourself?"
+- Include technical, project-based and behavioral questions relevant to the resume.
+- Return only a valid JSON array of 20 strings. No Markdown fences or extra text.
+
+RESUME:
+${text}
+`);
+
+      const generatedQuestions = parseQuestions(response);
+
+      if (generatedQuestions.length < 20) {
+        throw new Error(
+          `Only ${generatedQuestions.length} questions were generated. Please try again.`
+        );
       }
 
-      const data = await response.json().catch(() => ({}));
-      const generatedText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-      const scoreMatch = generatedText.match(/Score:\s*(\d+)\/10/);
-      const scoreNum = scoreMatch ? Number(scoreMatch[1]) : 5;
-
-      let explanation = null;
-      if (isTechnical && generatedText.includes('Concept:')) {
-        explanation = generatedText.split('Concept:')[1]?.split('Feedback:')[0]?.trim();
-      }
-
-      const feedbackText = generatedText.includes('Feedback:')
-        ? generatedText.split('Feedback:')[1]?.split('Example:')[0]?.trim()
-        : "Good attempt! Try to structure your answer better.";
-
-      const exampleText = generatedText.includes('Example:')
-        ? generatedText.split('Example:')[1]?.trim()
-        : "1. Start with a clear statement\n2. Provide relevant example\n3. Relate to your experience\n4. Conclude confidently";
-
-      const scoreVisual = '⭐'.repeat(Math.max(0, Math.min(10, scoreNum))) + '☆'.repeat(Math.max(0, 10 - Math.max(0, Math.min(10, scoreNum))));
-      let fullFeedback = `🎯 Score: ${scoreNum}/10\n${scoreVisual}\n\n`;
-      if (explanation) {
-        fullFeedback += `📚 Concept:\n${explanation}\n\n`;
-      }
-      fullFeedback += `💡 Feedback:\n${feedbackText}\n\n🌟 Example Answer:\n${exampleText}`;
-
-      setFeedback(fullFeedback);
-
-      const speechText = [
-        `You scored ${scoreNum} out of 10.`,
-        explanation && `About the concept: ${explanation.replace(/\n/g, ' ')}`,
-        `Feedback: ${feedbackText.replace(/\n/g, ' ')}`
-      ].filter(Boolean).join(' ');
-
-      speakText(speechText);
-    } catch (error) {
-      console.error('Error:', error);
-      setFeedback("🚧 Evaluation Error\nDefault Score: 5/10\n⭐⭐⭐⭐⭐☆☆☆☆☆\nTips:\n1. Be specific\n2. Use examples\n3. Stay concise");
+      setQuestions(generatedQuestions);
+      setQuestionIndex(0);
+      setStatus("Interview is ready.");
+    } catch (err) {
+      console.error("Prepare interview error:", err);
+      setError(err.message || "Could not prepare the interview.");
+      setStatus("");
     } finally {
       setLoading(false);
     }
   };
 
-const transcribeAudioWithGemini = async (audioBlob) => {
-  try {
-    if (!audioBlob) return '';
-
-    // quick guard: require at least ~0.5s of audio (size heuristic)
-    if (audioBlob.size < 1000) {
-      console.warn('Audio too small:', audioBlob.size);
-      return '';
+  const speakQuestion = () => {
+    if (!currentQuestion || !("speechSynthesis" in window)) {
+      setError("Text-to-speech is not available in this browser.");
+      return;
     }
 
-    // convert to base64
-    const base64Audio = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result || '';
-        const parts = String(result).split(',');
-        resolve(parts[1] || '');
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(audioBlob);
-    });
+    window.speechSynthesis.cancel();
 
-    if (!base64Audio) {
-      console.warn('Empty base64 audio');
-      return '';
+    const utterance = new SpeechSynthesisUtterance(currentQuestion);
+    utterance.lang = "en-US";
+    utterance.rate = 0.95;
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const fetchFeedback = async (answer) => {
+    const response = await askGemini(`
+You are a helpful and fair technical interview coach.
+Evaluate the candidate's answer to the interview question.
+
+Question:
+${currentQuestion}
+
+Candidate's answer:
+${answer}
+
+Candidate resume:
+${resumeText}
+
+Provide:
+1. Overall assessment
+2. What was good
+3. What could be improved
+4. A sample stronger answer
+5. A score out of 10
+
+Be constructive. Do not claim the candidate said things that are not in their answer.
+Use clear headings and readable text.
+`);
+
+    setFeedback(response);
+  };
+
+  const handleStartRecording = () => {
+    setError("");
+    setFeedback("");
+    setTranscript("");
+
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setError(
+        "Speech recognition is not supported in this browser. Please try a recent version of Chrome or Edge."
+      );
+      return;
     }
 
-    if (!GEMINI_API_KEY) {
-      console.warn('Missing GEMINI_API_KEY');
-      return '';
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch {
+        // Previous session may already be closed.
+      }
     }
 
-    // choose a model that is known to support inline audio for transcription
-    const model = 'gemini-1.5-flash';
-    const url = `https://generativelanguage.googleapis.com/v1beta1/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+    finalTranscriptRef.current = "";
+    shouldProcessRef.current = false;
 
-    // build payload: single contents item with role + parts (instruction + audio inline)
-    const payload = {
-      contents: [
-        {
-          role: "user",
-          parts: [
-            // instruction (human-readable)
-            { text: "Transcribe this audio. Return only the transcribed plain text with no commentary." },
-            // inline audio data
-            {
-              inlineData: {
-                mimeType: audioBlob.type || "audio/webm",
-                data: base64Audio
-              }
-            }
-          ]
-        }
-      ]
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    recognitionRef.current = recognition;
+
+    recognition.onstart = () => {
+      recordingRef.current = true;
+      setRecording(true);
+      setStatus("Listening... Speak your answer.");
     };
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    recognition.onresult = (event) => {
+      let interimTranscript = "";
 
-    // helpful debug: if not ok, print body for inspection
-    if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      console.warn('Transcription API error', response.status, text);
-      return '';
-    }
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        const recognizedText = result[0]?.transcript || "";
 
-    const data = await response.json().catch(() => ({}));
+        if (result.isFinal) {
+          finalTranscriptRef.current += recognizedText + " ";
+        } else {
+          interimTranscript += recognizedText;
+        }
+      }
 
-    // Debug log the raw response once while developing:
-    // console.log('transcription response:', data);
+      setTranscript(
+        `${finalTranscriptRef.current} ${interimTranscript}`.trim()
+      );
+    };
 
-    // pick the first candidate text (defensive)
-    const transcript = data?.candidates?.[0]?.content?.parts?.find(p => typeof p.text === 'string')?.text || '';
+    recognition.onerror = (event) => {
+      console.error("Speech recognition error:", event.error);
 
-    return (transcript || '').trim();
-  } catch (err) {
-    console.error('Transcription error:', err);
-    return '';
-  }
-};
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        setError(
+          "Microphone or speech recognition permission was denied. Allow microphone access in your browser settings."
+        );
+      } else if (event.error === "network") {
+        setError(
+          "The browser speech service encountered a network error. Check your internet connection and try again."
+        );
+      } else if (event.error !== "no-speech" && event.error !== "aborted") {
+        setError(`Speech recognition error: ${event.error}`);
+      }
+    };
 
+    recognition.onend = async () => {
+      recordingRef.current = false;
+      setRecording(false);
 
-  const handleStartRecording = async () => {
+      if (!shouldProcessRef.current) return;
+      shouldProcessRef.current = false;
+
+      const answer = finalTranscriptRef.current.trim();
+
+      if (!answer) {
+        setError("No speech was detected. Please try recording your answer again.");
+        setStatus("");
+        return;
+      }
+
+      setTranscript(answer);
+      setLoading(true);
+      setStatus("Evaluating your answer...");
+
+      try {
+        await fetchFeedback(answer);
+        setStatus("Feedback is ready.");
+      } catch (err) {
+        console.error("Feedback error:", err);
+        setError(err.message || "Could not generate feedback.");
+        setStatus("");
+      } finally {
+        setLoading(false);
+      }
+    };
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data && event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-
-      mediaRecorder.onstop = async () => {
-        try {
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-          // Clear chunks immediately so next recording is fresh
-          audioChunksRef.current = [];
-          // stop tracks
-          mediaRecorder.stream?.getTracks().forEach(t => t.stop());
-          await processAudio(audioBlob);
-        } catch (err) {
-          console.error('onstop processing error', err);
-          setLoading(false);
-        }
-      };
-
-      audioChunksRef.current = [];
-      mediaRecorder.start();
-      setRecording(true);
-      setFeedback('');
+      recognition.start();
     } catch (err) {
-      console.error('Error starting recording:', err);
-      alert('Could not access microphone. Please check permissions.');
+      console.error("Could not start recognition:", err);
+      setError("Could not start speech recognition. Please try again.");
+      setStatus("");
     }
   };
 
   const handleStopRecording = () => {
-    try {
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
-      }
-      setRecording(false);
-    } catch (e) {
-      console.warn('stop recording error', e);
-      setRecording(false);
-    }
-  };
+    if (!recognitionRef.current || !recordingRef.current) return;
 
-  const processAudio = async (audioBlob) => {
-    setLoading(true);
-    try {
-      const transcriptText = await transcribeAudioWithGemini(audioBlob);
-      setTranscript(transcriptText);
+    shouldProcessRef.current = true;
+    setStatus("Finishing transcription...");
 
-      if (transcriptText) {
-        await fetchFeedback(transcriptText);
-      } else {
-        setFeedback('No speech detected. Please try again.');
-        setLoading(false);
-      }
-    } catch (error) {
-      console.error('Error processing audio:', error);
-      setFeedback('Could not process audio. Please try speaking again.');
-      setLoading(false);
+    try {
+      recognitionRef.current.stop();
+    } catch (err) {
+      console.error("Could not stop recognition:", err);
+      shouldProcessRef.current = false;
+      recordingRef.current = false;
+      setRecording(false);
+      setError("Could not stop speech recognition. Please try again.");
     }
   };
 
   const handleNextQuestion = () => {
-    try {
-      if (window.speechSynthesis) window.speechSynthesis.cancel();
-    } catch (e) {}
-    if (currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex((prev) => prev + 1);
-      setTranscript('');
-      setFeedback('');
-    } else {
-      setInterviewCompleted(true);
+    if (recordingRef.current) {
+      setError("Stop your current answer before moving to the next question.");
+      return;
     }
-  };
 
-  const resetInterview = () => {
-    try {
-      if (window.speechSynthesis) window.speechSynthesis.cancel();
-    } catch (e) {}
-    setInterviewStarted(false);
-    setInterviewCompleted(false);
-    setCurrentQuestionIndex(-1);
-    setQuestions([]);
-    setTranscript('');
-    setFeedback('');
-    setLoading(false);
-  };
+    if (questionIndex >= questions.length - 1) {
+      setStatus("You have completed all 20 interview questions.");
+      return;
+    }
 
-  // Safe progress width calculation
-  const progressWidth = questions.length > 0 ? `${((currentQuestionIndex + 1) / questions.length) * 100}%` : '0%';
+    setQuestionIndex((index) => index + 1);
+    setTranscript("");
+    setFeedback("");
+    setError("");
+    setStatus("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   return (
-    <div className="min-h-screen pt-[70px] bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-      {/* Header Section */}
-      <div className="bg-white shadow-lg border-b-4">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="text-center">
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-4">
-              🎯 AI Mock Interview Platform
-            </h1>
-            <p className="text-lg sm:text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-              Practice with AI-powered interviews tailored for final year students. Get instant feedback and improve your skills!
-            </p>
-          </div>
-        </div>
-      </div>
+    <main style={styles.page}>
+      <h1>AI Mock Interview</h1>
+      <p>
+        Upload your resume, prepare your interview, answer aloud, and receive
+        feedback.
+      </p>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {!interviewStarted ? (
-          <div className="grid lg:grid-cols-2 gap-8">
-            {/* Upload Section */}
-            <div className="bg-white shadow-xl rounded-2xl p-6 lg:p-8 border border-gray-100 hover:shadow-2xl transition-all duration-300">
-              <div className="flex items-center mb-6">
-                <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center mr-4">
-                  <span className="text-white text-xl font-bold">📄</span>
-                </div>
-                <h2 className="text-2xl font-bold text-gray-800">Upload Your Resume</h2>
-              </div>
+      <section style={styles.card}>
+        <h2>1. Prepare your interview</h2>
 
-              <div className="mb-6">
-                <label className="block text-sm font-semibold text-gray-700 mb-3">
-                  Resume (PDF Only):
-                </label>
-                <div className="relative">
-                  <input
-                    type="file"
-                    accept=".pdf"
-                    onChange={handleResumeUpload}
-                    className="hidden"
-                    id="resume-upload"
-                  />
-                  <label
-                    htmlFor="resume-upload"
-                    className="flex items-center justify-center w-full px-6 py-4 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-all duration-300 group"
-                  >
-                    <div className="text-center">
-                      <div className="w-12 h-12 mx-auto mb-3 bg-blue-100 rounded-full flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-                        <span className="text-blue-600 text-xl">📤</span>
-                      </div>
-                      <p className="text-gray-600 font-medium">Click to upload PDF</p>
-                      <p className="text-sm text-gray-500 mt-1">Maximum size: 10MB</p>
-                    </div>
-                  </label>
-                </div>
+        <label htmlFor="resume">Resume PDF</label>
+        <input
+          id="resume"
+          type="file"
+          accept=".pdf,application/pdf"
+          onChange={handleResumeChange}
+        />
 
-                {fileName && (
-                  <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-xl">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <span className="text-green-600 mr-2">✅</span>
-                        <span className="text-green-800 font-medium">{fileName}</span>
-                      </div>
-                      {resumeText && (
-                        <button
-                          onClick={() => setShowResume(!showResume)}
-                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                        >
-                          {showResume ? 'Hide' : 'Preview'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
+        <label htmlFor="jobDescription">Job description (optional)</label>
+        <textarea
+          id="jobDescription"
+          rows={4}
+          value={jobDescription}
+          onChange={(event) => setJobDescription(event.target.value)}
+          placeholder="Paste the job description here..."
+          style={styles.textarea}
+        />
 
-              {showResume && resumeText && (
-                <div className="mb-6 border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-                  <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex justify-between items-center">
-                    <h3 className="text-lg font-semibold text-gray-800 flex items-center">
-                      <span className="mr-2">📋</span>
-                      Formatted Resume
-                    </h3>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(formattedResumeText)}
-                      className="px-3 py-1 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium"
-                      title="Copy to clipboard"
-                    >
-                      📋 Copy
-                    </button>
-                  </div>
-                  <div className="max-h-96 overflow-y-auto p-4 bg-white">
-                    <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-700 font-mono">
-                      {formattedResumeText}
-                    </pre>
-                  </div>
-                  <div className="bg-gray-50 px-4 py-2 text-xs text-gray-500 flex justify-between border-t border-gray-200">
-                    <span>{formattedResumeText?.length || 0} characters</span>
-                    <span>Scroll to view full content</span>
-                  </div>
-                </div>
-              )}
-            </div>
+        <button
+          onClick={handlePrepareInterview}
+          disabled={loading || !resumeFile}
+          style={styles.button}
+        >
+          {loading ? "Please wait..." : "Prepare Interview"}
+        </button>
 
-            {/* Job Description Section */}
-            <div className="bg-white shadow-xl rounded-2xl p-6 lg:p-8 border border-gray-100 hover:shadow-2xl transition-all duration-300">
-              <div className="flex items-center mb-6">
-                <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-blue-600 rounded-xl flex items-center justify-center mr-4">
-                  <span className="text-white text-xl font-bold">💼</span>
-                </div>
-                <h2 className="text-2xl font-bold text-gray-800">Job Description</h2>
-              </div>
-
-              <div className="mb-6">
-                <label className="block text-sm font-semibold text-gray-700 mb-3">
-                  Target Job Description (Optional):
-                </label>
-                <textarea
-                  value={jobDescription}
-                  onChange={(e) => setJobDescription(e.target.value)}
-                  rows={8}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 resize-none"
-                  placeholder="Paste the job description here to get more targeted questions..."
-                />
-                <p className="text-sm text-gray-500 mt-2">
-                  Adding a job description will generate more relevant interview questions
-                </p>
-              </div>
-
-              <div className="text-center">
-                <button
-                  onClick={generateQuestions}
-                  disabled={!resumeText || loading}
-                  className={`relative px-8 py-4 bg-gradient-to-r from-green-600 to-blue-600 text-white font-bold rounded-xl text-lg transition-all duration-300 transform hover:scale-105 hover:shadow-xl ${(!resumeText || loading) ? 'opacity-50 cursor-not-allowed transform-none hover:scale-100' : ''}`}
-                >
-                  {loading ? (
-                    <span className="flex items-center justify-center">
-                      <div className="w-6 h-6 border-3 border-white border-t-transparent rounded-full animate-spin mr-3"></div>
-                      Generating Questions...
-                    </span>
-                  ) : (
-                    <span className="flex items-center justify-center">
-                      🚀 Start Interview
-                    </span>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : interviewCompleted ? (
-          <div className="text-center">
-            <div className="bg-gradient-to-r from-green-400 to-blue-500 rounded-3xl p-8 lg:p-12 shadow-2xl transform hover:scale-105 transition-all duration-300">
-              <div className="text-6xl mb-6 animate-bounce">🎉</div>
-              <h2 className="text-3xl lg:text-4xl font-bold text-white mb-4">
-                Congratulations!
-              </h2>
-              <p className="text-xl text-white/90 mb-8 max-w-2xl mx-auto">
-                You've successfully completed all {questions.length} questions. Great job on finishing your mock interview!
-              </p>
-              <button
-                onClick={resetInterview}
-                className="px-8 py-4 bg-white text-blue-600 font-bold rounded-xl text-lg hover:bg-gray-100 transition-all duration-300 transform hover:scale-105 shadow-lg"
-              >
-                🔄 Start New Interview
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="max-w-4xl mx-auto">
-            {/* Progress Bar */}
-            <div className="mb-8 bg-white rounded-2xl p-6 shadow-xl border border-gray-100">
-              <div className="flex justify-between items-center mb-4">
-                <span className="text-sm font-semibold text-gray-600">Interview Progress</span>
-                <span className="text-sm font-semibold text-blue-600">
-                  {currentQuestionIndex + 1 > 0 ? currentQuestionIndex + 1 : 0} of {questions.length}
-                </span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                  style={{ width: progressWidth }}
-                ></div>
-              </div>
-            </div>
-
-            {/* Question Section */}
-            <div className="bg-white shadow-xl rounded-2xl p-6 lg:p-8 border border-gray-100 mb-8">
-              <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6 border-l-4 border-blue-500 mb-6">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
-                  <h3 className="text-xl font-bold text-gray-900 flex items-center">
-                    <span className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold mr-3">
-                      {currentQuestionIndex + 1 > 0 ? currentQuestionIndex + 1 : 0}
-                    </span>
-                    Question {currentQuestionIndex + 1 > 0 ? currentQuestionIndex + 1 : 0}
-                  </h3>
-                  <button
-                    onClick={() => speakQuestion(questions[currentQuestionIndex])}
-                    disabled={!(questions.length > 0 && currentQuestionIndex >= 0)}
-                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center disabled:opacity-50"
-                  >
-                    🔊 Repeat
-                  </button>
-                </div>
-                <p className="text-lg font-medium text-gray-800 leading-relaxed">
-                  {questions[currentQuestionIndex] || '—'}
-                </p>
-              </div>
-
-              {/* Recording Controls */}
-              <div className="text-center mb-8">
-                <button
-                  onClick={recording ? handleStopRecording : handleStartRecording}
-                  disabled={loading}
-                  className={`relative px-8 py-4 ${recording ? 'bg-gradient-to-r from-red-500 to-pink-600' : 'bg-gradient-to-r from-green-500 to-blue-600'} text-white font-bold rounded-xl text-lg transition-all duration-300 transform hover:scale-105 hover:shadow-xl min-w-[220px]`}
-                >
-                  {recording ? (
-                    <span className="flex items-center justify-center">
-                      <div className="relative flex h-4 w-4 mr-3">
-                        <div className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></div>
-                        <div className="relative inline-flex rounded-full h-4 w-4 bg-white"></div>
-                      </div>
-                      Stop Recording
-                    </span>
-                  ) : (
-                    <span className="flex items-center justify-center">
-                      🎤 Start Recording
-                    </span>
-                  )}
-                </button>
-              </div>
-
-              {/* Loading State */}
-              {loading && !feedback && (
-                <div className="text-center my-6">
-                  <div className="inline-flex items-center px-6 py-3 bg-blue-50 rounded-xl border border-blue-200">
-                    <div className="w-6 h-6 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mr-3"></div>
-                    <span className="text-blue-800 font-medium">Processing your answer...</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Transcript Display */}
-              {transcript && !feedback && (
-                <div className="mb-6 p-6 bg-gray-50 rounded-xl border border-gray-200">
-                  <h4 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
-                    <span className="mr-2">💬</span>
-                    Your Answer:
-                  </h4>
-                  <p className="text-gray-700 leading-relaxed">{transcript}</p>
-                </div>
-              )}
-
-              {/* Feedback Section */}
-              {feedback && (
-                <div className="space-y-6">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-                    <h4 className="text-xl font-bold text-gray-900 flex items-center">
-                      <span className="mr-2">🤖</span>
-                      AI Feedback
-                    </h4>
-                    <button
-                      onClick={() => speakText(feedback)}
-                      disabled={readingFeedback}
-                      className={`px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors font-medium flex items-center ${readingFeedback ? 'opacity-70 cursor-not-allowed' : ''}`}
-                    >
-                      {readingFeedback ? '🔊 Reading...' : '🔊 Read Aloud'}
-                    </button>
-                  </div>
-
-                  {/* Progress line for reading feedback */}
-                  {readingFeedback && (
-                    <div className="mb-4">
-                      <div className="flex items-center mb-2">
-                        <span className="text-sm text-purple-600 font-medium mr-2">🎵 Reading Progress:</span>
-                        <span className="text-sm text-gray-600">{Math.round(feedbackProgress)}%</span>
-                      </div>
-                      <div className="w-full bg-purple-100 rounded-full h-2 overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all duration-100 ease-out relative"
-                          style={{ width: `${feedbackProgress}%` }}
-                        >
-                          <div className="absolute right-0 top-0 h-full w-2 bg-white opacity-70 rounded-full animate-pulse"></div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="p-6 bg-gradient-to-r from-green-50 to-blue-50 rounded-xl border-l-4 border-green-500">
-                    <pre className="whitespace-pre-wrap break-words text-gray-800 leading-relaxed font-sans">
-                      {feedback}
-                    </pre>
-                  </div>
-
-                  <div className="text-center pt-6">
-                    <button
-                      onClick={handleNextQuestion}
-                      disabled={loading}
-                      className={`px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-xl text-lg transition-all duration-300 transform hover:scale-105 hover:shadow-xl ${loading ? 'opacity-50 cursor-not-allowed transform-none hover:scale-100' : ''}`}
-                    >
-                      {currentQuestionIndex < questions.length - 1 ? (
-                        <span className="flex items-center justify-center">
-                          Next Question →
-                        </span>
-                      ) : (
-                        <span className="flex items-center justify-center">
-                          🏁 Finish Interview
-                        </span>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+        {formattedResume && (
+          <details style={styles.details}>
+            <summary>View formatted resume</summary>
+            <pre style={styles.pre}>{formattedResume}</pre>
+          </details>
         )}
-        <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.worker.min.js" />
-      </div>
-    </div>
-  );
-};
+      </section>
 
-export default Interview;
+      {questions.length > 0 && (
+        <section style={styles.card}>
+          <h2>2. Interview questions</h2>
+
+          <p>
+            Question {questionIndex + 1} of {questions.length}
+          </p>
+
+          <h3>{currentQuestion}</h3>
+
+          <div style={styles.actions}>
+            <button onClick={speakQuestion} style={styles.button}>
+              Read Question Aloud
+            </button>
+
+            {!recording ? (
+              <button
+                onClick={handleStartRecording}
+                disabled={loading}
+                style={styles.button}
+              >
+                Start Answer
+              </button>
+            ) : (
+              <button
+                onClick={handleStopRecording}
+                style={styles.stopButton}
+              >
+                Stop Answer
+              </button>
+            )}
+          </div>
+
+          <p aria-live="polite">{recording ? "Listening..." : status}</p>
+
+          <label htmlFor="transcript">Your transcribed answer</label>
+          <textarea
+            id="transcript"
+            rows={6}
+            value={transcript}
+            onChange={(event) => setTranscript(event.target.value)}
+            placeholder="Your recognized speech will appear here. You can edit it before asking for feedback."
+            style={styles.textarea}
+          />
+
+          <button
+            onClick={async () => {
+              if (!transcript.trim()) {
+                setError("Please speak or enter an answer first.");
+                return;
+              }
+
+              setLoading(true);
+              setError("");
+              setFeedback("");
+              setStatus("Evaluating your answer...");
+
+              try {
+                await fetchFeedback(transcript.trim());
+                setStatus("Feedback is ready.");
+              } catch (err) {
+                setError(err.message || "Could not generate feedback.");
+                setStatus("");
+              } finally {
+                setLoading(false);
+              }
+            }}
+            disabled={loading || recording || !transcript.trim()}
+            style={styles.button}
+          >
+            {loading ? "Evaluating..." : "Get Feedback"}
+          </button>
+
+          {feedback && (
+            <div style={styles.feedback}>
+              <h3>AI Feedback</h3>
+              <pre style={styles.pre}>{feedback}</pre>
+            </div>
+          )}
+
+          <button
+            onClick={handleNextQuestion}
+            disabled={loading || recording}
+            style={styles.button}
+          >
+            {questionIndex === questions.length - 1
+              ? "Finish Interview"
+              : "Next Question"}
+          </button>
+        </section>
+      )}
+
+      {status && <p role="status">{status}</p>}
+      {error && (
+        <p role="alert" style={styles.error}>
+          {error}
+        </p>
+      )}
+    </main>
+  );
+}
+
+const styles = {
+  page: {
+    maxWidth: "850px",
+    margin: "0 auto",
+    padding: "24px",
+    fontFamily: "Arial, sans-serif",
+    lineHeight: 1.6,
+  },
+  card: {
+    border: "1px solid #ddd",
+    borderRadius: "12px",
+    padding: "20px",
+    marginTop: "20px",
+  },
+  textarea: {
+    display: "block",
+    boxSizing: "border-box",
+    width: "100%",
+    margin: "8px 0 16px",
+    padding: "12px",
+    border: "1px solid #bbb",
+    borderRadius: "8px",
+    font: "inherit",
+  },
+  button: {
+    padding: "10px 16px",
+    margin: "8px 8px 8px 0",
+    border: "none",
+    borderRadius: "8px",
+    cursor: "pointer",
+    background: "#2457d6",
+    color: "#fff",
+    fontWeight: 600,
+  },
+  stopButton: {
+    padding: "10px 16px",
+    margin: "8px 8px 8px 0",
+    border: "none",
+    borderRadius: "8px",
+    cursor: "pointer",
+    background: "#b42318",
+    color: "#fff",
+    fontWeight: 600,
+  },
+  actions: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "8px",
+  },
+  feedback: {
+    background: "#f6f8fa",
+    borderRadius: "8px",
+    padding: "16px",
+    margin: "16px 0",
+  },
+  pre: {
+    whiteSpace: "pre-wrap",
+    overflowWrap: "anywhere",
+    font: "inherit",
+  },
+  details: {
+    marginTop: "16px",
+  },
+  error: {
+    color: "#b42318",
+    fontWeight: 600,
+  },
+};
