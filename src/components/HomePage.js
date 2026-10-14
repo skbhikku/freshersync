@@ -201,7 +201,7 @@ const HomePage = () => {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
               <h1 className="text-2xl font-bold gradient-text">
-                fresher<span className="text-indigo-600">Sync</span>
+                AI Mock Interview<span className="text-indigo-600"></span>
               </h1>
             </div>
             
