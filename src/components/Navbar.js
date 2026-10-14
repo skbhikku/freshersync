@@ -144,7 +144,7 @@ export default function Navbar() {
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div className="md:col-span-2">
-              <h3 className="text-2xl font-bold mb-4 gradient-text">FresherSync</h3>
+              <h3 className="text-2xl font-bold mb-4 gradient-text">AI Mock Interview</h3>
               <p className="text-slate-300 mb-6 leading-relaxed">
                 The easiest way to book verified interviews with top recruiters. 
                 Designed for freshers and job seekers who want to accelerate their career journey.
