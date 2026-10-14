@@ -1,105 +1,210 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useCallback } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import DatePicker from 'react-datepicker';
-import { getAvailableSlots, createOrder, verifyPayment, getBookedSlot } from '../api/auth';
+import {
+  getAvailableSlots,
+  createOrder,
+  verifyPayment,
+  getBookedSlot
+} from '../api/auth';
 import '../styles/Dashboard.css';
 import 'react-datepicker/dist/react-datepicker.css';
 import Sections from './Sections';
-import { useNavbarContext } from './Navbar';
 
-const loadRazorpay = () => {
-  return new Promise((resolve) => {
-    if (window.Razorpay) return resolve(true);
+const loadRazorpay = () =>
+  new Promise((resolve) => {
+    if (window.Razorpay) {
+      resolve(true);
+      return;
+    }
+
+    const existingScript = document.querySelector(
+      'script[src="https://checkout.razorpay.com/v1/checkout.js"]'
+    );
+
+    if (existingScript) {
+      existingScript.addEventListener('load', () => resolve(true), { once: true });
+      existingScript.addEventListener('error', () => resolve(false), { once: true });
+      return;
+    }
+
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
     script.onload = () => resolve(true);
     script.onerror = () => resolve(false);
     document.body.appendChild(script);
   });
+
+// Use Indian Standard Time consistently.
+const getISTParts = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23'
+  }).formatToParts(date);
+
+  return Object.fromEntries(
+    parts.filter((p) => p.type !== 'literal').map((p) => [p.type, p.value])
+  );
 };
 
-const getISTDate = (date) => {
-  const offset = 5.5 * 60 * 60 * 1000;
-  return new Date(date.getTime() + offset);
+const getISTDateString = (date = new Date()) => {
+  const p = getISTParts(date);
+  return `${p.year}-${p.month}-${p.day}`;
 };
 
-const getISTDateString = (date) => {
-  return getISTDate(date).toISOString().split('T')[0];
+const parseSlotDateTime = (dateString, timeString) => {
+  // Supports slot times such as "09:00 AM" and "01:00 PM".
+  const match = String(timeString).trim().match(
+    /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i
+  );
+
+  if (!match) return null;
+
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const meridiem = match[3].toUpperCase();
+
+  if (hour < 1 || hour > 12 || minute < 0 || minute > 59) {
+    return null;
+  }
+
+  if (meridiem === 'AM' && hour === 12) hour = 0;
+  if (meridiem === 'PM' && hour !== 12) hour += 12;
+
+  const dateMatch = String(dateString).match(
+    /^(\d{4})-(\d{2})-(\d{2})$/
+  );
+
+  if (!dateMatch) return null;
+
+  const [, year, month, day] = dateMatch;
+
+  // Convert the slot's IST wall-clock time into a real UTC timestamp.
+  // India is UTC+05:30 and does not observe daylight saving time.
+  return new Date(
+    Date.UTC(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      hour - 5,
+      minute - 30
+    )
+  );
+};
+
+const getSlotStatus = (date, slot, now = new Date()) => {
+  if (slot.booked) return 'booked';
+
+  const slotDateTime = parseSlotDateTime(date, slot.time);
+
+  // Fail closed: unknown time formats must not be bookable.
+  if (!slotDateTime) return 'expired';
+
+  if (slotDateTime.getTime() <= now.getTime()) {
+    return 'expired';
+  }
+
+  return 'available';
 };
 
 export default function Dashboard() {
   const { user, refreshUser } = useOutletContext();
+
   const [availableSlots, setAvailableSlots] = useState([]);
-  const [filteredSlots, setFilteredSlots] = useState([]);
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [bookedSlots, setBookedSlots] = useState([]);
+  const [currentTime, setCurrentTime] = useState(() => new Date());
 
-  useEffect(() => {
-    if (user) {
-      fetchBookedSlots(user.email);
-    }
-    loadRazorpay();
-    fetchAvailableSlots();
-  }, [user]);
+  const fetchBookedSlots = useCallback(async (email) => {
+    if (!email) return;
 
-  const fetchBookedSlots = async (email) => {
     try {
       const { data } = await getBookedSlot(email);
-      const sorted = data.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      const sorted = [...data].sort((a, b) => {
+        const timeA = parseSlotDateTime(a.date, a.time);
+        const timeB = parseSlotDateTime(b.date, b.time);
+        return (timeB?.getTime() || 0) - (timeA?.getTime() || 0);
+      });
+
       setBookedSlots(sorted);
     } catch (err) {
       console.error('Error fetching booked slots:', err);
     }
-  };
+  }, []);
 
-  const filterValidSlots = (slots) => {
-    const now = new Date();
-    const istNow = getISTDate(now);
-    const todayStr = getISTDateString(now);
-
-    return slots
-      .filter(slot => {
-        const slotDateStr = getISTDateString(new Date(slot.date));
-        return slotDateStr >= todayStr;
-      })
-      .map(slot => {
-        const slotDate = new Date(slot.date);
-        const slotDateStr = getISTDateString(slotDate);
-        const isToday = slotDateStr === todayStr;
-
-        const updatedSlots = slot.slots.map((s) => {
-          const slotTime = new Date(`${slot.date}T${s.time}`);
-          const istSlotTime = getISTDate(slotTime);
-
-          if (s.booked) {
-            return { ...s, status: 'booked' };
-          } else if (isToday && istSlotTime < istNow) {
-            return { ...s, status: 'expired' };
-          } else {
-            return { ...s, status: 'available' };
-          }
-        });
-
-        return { ...slot, slots: updatedSlots };
-      });
-  };
-
-  const fetchAvailableSlots = async () => {
+  const fetchAvailableSlots = useCallback(async () => {
     try {
-      setLoading(true);
       const response = await getAvailableSlots();
-      const filtered = filterValidSlots(response.data);
-      setAvailableSlots(filtered);
-      setFilteredSlots(filtered);
+      setAvailableSlots(Array.isArray(response.data) ? response.data : []);
     } catch (err) {
-      setError('Failed to load available slots');
-    } finally {
-      setLoading(false);
+      console.error('Error loading available slots:', err);
+      setError('Failed to load available slots. Please refresh the page.');
     }
+  }, []);
+
+  useEffect(() => {
+    if (user?.email) {
+      fetchBookedSlots(user.email);
+    }
+
+    fetchAvailableSlots();
+    loadRazorpay();
+  }, [user, fetchBookedSlots, fetchAvailableSlots]);
+
+  // Update slot status every second so past slots become unavailable
+  // even when the page remains open.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  const todayString = getISTDateString(currentTime);
+
+  const getSlotsForDate = (date) => {
+    const dateString = getISTDateString(date);
+    const dateDocument = availableSlots.find(
+      (item) => item.date === dateString
+    );
+
+    if (!dateDocument || !Array.isArray(dateDocument.slots)) {
+      return [];
+    }
+
+    return dateDocument.slots.map((slot) => ({
+      ...slot,
+      status: getSlotStatus(dateDocument.date, slot, currentTime)
+    }));
+  };
+
+  const getAvailableDates = () => {
+    return availableSlots
+      .filter((item) => {
+        if (item.date < todayString) return false;
+
+        return item.slots?.some(
+          (slot) => getSlotStatus(item.date, slot, currentTime) === 'available'
+        );
+      })
+      .map((item) => {
+        const [year, month, day] = item.date.split('-').map(Number);
+        return new Date(year, month - 1, day, 12, 0, 0);
+      });
   };
 
   const handleDateSelect = (date) => {
@@ -109,23 +214,59 @@ export default function Dashboard() {
     setSuccess('');
   };
 
-  const handleSlotSelect = (time) => {
-    setSelectedSlot(current => current === time ? null : time);
+  const handleSlotSelect = (slot) => {
+    if (slot.status !== 'available') return;
+
+    setSelectedSlot((current) =>
+      current === slot.time ? null : slot.time
+    );
+
     setError('');
+    setSuccess('');
   };
 
   const handlePayment = async () => {
-    if (!selectedDate || !selectedSlot) {
-      setError('Please select a date and time slot');
+    if (!user?.email) {
+      setError('Please log in to book an interview.');
       return;
     }
 
-    try {
-      setLoading(true);
-      const razorpayLoaded = await loadRazorpay();
-      if (!razorpayLoaded) throw new Error('Razorpay failed to load');
+    if (!selectedDate || !selectedSlot) {
+      setError('Please select a date and available time slot.');
+      return;
+    }
 
-      const amount = 4900 ; // ₹49 in paise
+    const dateString = getISTDateString(selectedDate);
+
+    // Recheck the selected slot immediately before starting payment.
+    const dateDocument = availableSlots.find(
+      (item) => item.date === dateString
+    );
+
+    const slot = dateDocument?.slots?.find(
+      (item) => item.time === selectedSlot
+    );
+
+    if (!slot || getSlotStatus(dateString, slot, new Date()) !== 'available') {
+      setSelectedSlot(null);
+      setError('This slot has expired or is no longer available. Please select another slot.');
+      await fetchAvailableSlots();
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const razorpayLoaded = await loadRazorpay();
+
+      if (!razorpayLoaded || !window.Razorpay) {
+        throw new Error('Razorpay failed to load. Please try again.');
+      }
+
+      // ₹49 in paise.
+      const amount = 4900;
       const { data: order } = await createOrder(amount);
 
       const options = {
@@ -133,8 +274,9 @@ export default function Dashboard() {
         amount: order.amount,
         currency: order.currency,
         name: 'Interview Booking',
-        description: `Booking for ${getISTDateString(selectedDate)} at ${selectedSlot}`,
+        description: `Booking for ${dateString} at ${selectedSlot}`,
         order_id: order.id,
+
         handler: async (response) => {
           try {
             const paymentData = {
@@ -142,143 +284,227 @@ export default function Dashboard() {
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
               userEmail: user.email,
-              date: getISTDateString(selectedDate),
+              date: dateString,
               time: selectedSlot
             };
 
             const { data } = await verifyPayment(paymentData);
-            if (data.success) {
-              await refreshUser(); // Refresh user data
-              await fetchAvailableSlots();
-              await fetchBookedSlots(user.email);
-              setSuccess('Payment successful! Interview booked.');
-              setSelectedDate(new Date());
-              setSelectedSlot(null);
+
+            if (!data?.success) {
+              throw new Error(
+                data?.message || 'Payment verification failed.'
+              );
             }
+
+            await refreshUser();
+            await fetchAvailableSlots();
+            await fetchBookedSlots(user.email);
+
+            setSuccess('Payment successful! Interview booked.');
+            setSelectedSlot(null);
           } catch (err) {
-            setError('Payment verification failed');
+            setError(
+              err.response?.data?.message ||
+              err.message ||
+              'Payment verification failed. Please contact support if money was deducted.'
+            );
           } finally {
             setLoading(false);
           }
         },
+
         prefill: {
-          name: user.name,
+          name: user.name || '',
           email: user.email,
           contact: user.phone || ''
         },
+
         theme: {
           color: '#4f46e5'
         },
+
         modal: {
-          ondismiss: () => setError('Payment cancelled refresh the page')
+          ondismiss: () => {
+            setLoading(false);
+            setError('Payment cancelled. You can select a slot and try again.');
+          }
         }
       };
 
       const razorpay = new window.Razorpay(options);
+
+      razorpay.on('payment.failed', (response) => {
+        setLoading(false);
+        setError(
+          response.error?.description ||
+          'Payment failed. Please try again.'
+        );
+      });
+
       razorpay.open();
     } catch (err) {
-      setError(err.message || 'Payment failed');
+      setError(
+        err.response?.data?.message ||
+        err.message ||
+        'Payment failed. Please try again.'
+      );
       setLoading(false);
     }
   };
 
-  const getAvailableDates = () =>
-    filteredSlots.map(slot => new Date(slot.date));
+  const slotsForSelectedDate = selectedDate
+    ? getSlotsForDate(selectedDate)
+    : [];
 
-  const getSlotsForDate = (date) =>
-    availableSlots.find(s => s.date === getISTDateString(date))?.slots || [];
+  const latestBooking = bookedSlots[0];
+  const latestBookingDateTime = latestBooking
+    ? parseSlotDateTime(latestBooking.date, latestBooking.time)
+    : null;
 
   return (
     <>
-    <main className="main-content">
-      <div className="booking-container" id="booking">
-        <div className="calendar-section">
-          <h2>Select Date</h2>
-          <DatePicker
-            selected={selectedDate}
-            onChange={handleDateSelect}
-            includeDates={getAvailableDates()}
-            inline
-          />
-          <div className="booking-instructions">
-            <h3>Booking Process</h3>
-            <ol>
-              <li>Select date & choose available time slot</li>
-              <li>Click "Pay ₹49" to complete booking</li>
-              <li>Check email for confirmation</li>
-            </ol>
-            <div className="note-box">
-              <strong>Important Note:</strong>
-              <ul>
-                <li>Google Meet link shared 1 day before interview</li>
-                <li>For today's bookings: Link shared 1 hour prior</li>
-              </ul>
+      <main className="main-content">
+        <div className="booking-container" id="booking">
+          <div className="calendar-section">
+            <h2>Select Date</h2>
+
+            <DatePicker
+              selected={selectedDate}
+              onChange={handleDateSelect}
+              includeDates={getAvailableDates()}
+              minDate={new Date()}
+              inline
+            />
+
+            <div className="booking-instructions">
+              <h3>Booking Process</h3>
+              <ol>
+                <li>Select a date and choose an available time slot.</li>
+                <li>Click "Pay ₹49" to complete booking.</li>
+                <li>Check your email for confirmation.</li>
+              </ol>
+
+              <div className="note-box">
+                <strong>Important Note:</strong>
+                <ul>
+                  <li>Google Meet link shared 1 day before the interview.</li>
+                  <li>For today's bookings: link shared 1 hour prior.</li>
+                </ul>
+              </div>
             </div>
           </div>
-        </div>
 
-        {selectedDate && (
-          <div className="slots-section">
-            <h3>Available Time Slots for {selectedDate.toDateString()}</h3>
-            <div className="slots-grid">
-              {getSlotsForDate(selectedDate).map((slot, index) => {
-                const isSelected = selectedSlot === slot.time;
-                const status = slot.status;
+          {selectedDate && (
+            <div className="slots-section">
+              <h3>
+                Available Time Slots for{' '}
+                {selectedDate.toDateString()}
+              </h3>
 
-                return (
-                  <button
-                    key={index}
-                    className={`time-slot ${isSelected ? 'selected' : ''} ${status}`}
-                    onClick={() => status === 'available' && handleSlotSelect(slot.time)}
-                    disabled={status !== 'available'}
-                  >
-                    {slot.time}
-                    {status === 'expired' && <span className="expired-label">Expired</span>}
-                    {status === 'booked' && <span className="booked-label">Booked</span>}
-                  </button>
-                );
-              })}
+              <div className="slots-grid">
+                {slotsForSelectedDate.length === 0 ? (
+                  <p>No available slots for this date.</p>
+                ) : (
+                  slotsForSelectedDate.map((slot) => {
+                    const isSelected = selectedSlot === slot.time;
+                    const status = slot.status;
+
+                    return (
+                      <button
+                        key={slot.time}
+                        type="button"
+                        className={`time-slot ${isSelected ? 'selected' : ''} ${status}`}
+                        onClick={() => handleSlotSelect(slot)}
+                        disabled={status !== 'available' || loading}
+                        aria-disabled={status !== 'available' || loading}
+                        title={
+                          status === 'expired'
+                            ? 'This time slot has expired'
+                            : status === 'booked'
+                            ? 'This time slot is already booked'
+                            : 'Select this time slot'
+                        }
+                      >
+                        {slot.time}
+
+                        {status === 'expired' && (
+                          <span className="expired-label">
+                            Time Over
+                          </span>
+                        )}
+
+                        {status === 'booked' && (
+                          <span className="booked-label">
+                            Booked
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {selectedSlot && (
-          <div className="payment-section">
-            <button onClick={handlePayment} disabled={loading}>
-              {loading ? 'Processing...' : `Pay ₹49 for ${selectedSlot}`}
-            </button>
-            {error && <p className="error">{error}</p>}
-            {success && <p className="success">{success}</p>}
-          </div>
-        )}
-      </div>
+          {(error || success) && (
+            <div className="payment-section" aria-live="polite">
+              {error && <p className="error">{error}</p>}
+              {success && <p className="success">{success}</p>}
+            </div>
+          )}
 
-      {bookedSlots.length === 0 ? (
-        <div className="booked-slots-section" id="booked-slots">
-          <h2>Book Your First Interview</h2>
-          <p>No interviews booked yet. Take the first step in your career journey - schedule your interview now!</p>
+          {selectedSlot && (
+            <div className="payment-section">
+              <button
+                type="button"
+                onClick={handlePayment}
+                disabled={loading}
+              >
+                {loading
+                  ? 'Processing...'
+                  : `Pay ₹49 for ${selectedSlot}`}
+              </button>
+            </div>
+          )}
         </div>
-      ) : (
+
         <div className="booked-slots-section" id="booked-slots">
-          {new Date(`${bookedSlots[0].date}T${bookedSlots[0].time}`) > new Date() ? (
+          {!latestBooking ? (
+            <>
+              <h2>Book Your First Interview</h2>
+              <p>
+                No interviews booked yet. Take the first step in your
+                career journey — schedule your interview now!
+              </p>
+            </>
+          ) : latestBookingDateTime &&
+            latestBookingDateTime.getTime() > currentTime.getTime() ? (
             <>
               <h2>Your Upcoming Interview</h2>
-              <p><strong>Scheduled:</strong> {bookedSlots[0].date} at {bookedSlots[0].time}</p>
-              <p className="reminder">Get ready for your upcoming interview! Make sure to prepare your materials in advance.</p>
+              <p>
+                <strong>Scheduled:</strong> {latestBooking.date} at{' '}
+                {latestBooking.time}
+              </p>
+              <p className="reminder">
+                Get ready for your upcoming interview! Make sure to
+                prepare your materials in advance.
+              </p>
             </>
           ) : (
             <>
               <h2>Your Last Booked Interview</h2>
-              <p><strong>Last Attended:</strong> {bookedSlots[0].date} at {bookedSlots[0].time}</p>
+              <p>
+                <strong>Last Attended:</strong> {latestBooking.date} at{' '}
+                {latestBooking.time}
+              </p>
             </>
           )}
         </div>
-      )}
+      </main>
 
-    </main>
-    <div> 
-      <Sections/>
-    </div>
+      <div>
+        <Sections />
+      </div>
     </>
   );
 }
