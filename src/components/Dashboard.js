@@ -225,132 +225,163 @@ export default function Dashboard() {
     setSuccess('');
   };
 
-  const handlePayment = async () => {
-    if (!user?.email) {
-      setError('Please log in to book an interview.');
-      return;
-    }
 
-    if (!selectedDate || !selectedSlot) {
-      setError('Please select a date and available time slot.');
-      return;
-    }
+const handlePayment = async () => {
+  if (!user?.email) {
+    setError("Please log in to book an interview.");
+    return;
+  }
 
-    const dateString = getISTDateString(selectedDate);
+  if (!selectedDate || !selectedSlot) {
+    setError("Please select a date and available time slot.");
+    return;
+  }
 
-    // Recheck the selected slot immediately before starting payment.
-    const dateDocument = availableSlots.find(
-      (item) => item.date === dateString
+  const dateString = getISTDateString(selectedDate);
+
+  const dateDocument = availableSlots.find(
+    (item) => item.date === dateString
+  );
+
+  const slot = dateDocument?.slots?.find(
+    (item) => item.time === selectedSlot
+  );
+
+  if (
+    !slot ||
+    getSlotStatus(dateString, slot, new Date()) !== "available"
+  ) {
+    setSelectedSlot(null);
+    setError(
+      "This slot has expired or is no longer available. Please select another slot."
     );
+    await fetchAvailableSlots();
+    return;
+  }
 
-    const slot = dateDocument?.slots?.find(
-      (item) => item.time === selectedSlot
-    );
+  setLoading(true);
+  setError("");
+  setSuccess("");
 
-    if (!slot || getSlotStatus(dateString, slot, new Date()) !== 'available') {
-      setSelectedSlot(null);
-      setError('This slot has expired or is no longer available. Please select another slot.');
-      await fetchAvailableSlots();
-      return;
+  try {
+    const razorpayLoaded = await loadRazorpay();
+
+    if (!razorpayLoaded || !window.Razorpay) {
+      throw new Error("Razorpay failed to load. Please try again.");
     }
 
-    setLoading(true);
-    setError('');
-    setSuccess('');
+    // Backend determines the actual amount: ₹49.
+    const { data: order } = await createOrder();
 
-    try {
-      const razorpayLoaded = await loadRazorpay();
+    const orderId = order.orderId || order.id;
 
-      if (!razorpayLoaded || !window.Razorpay) {
-        throw new Error('Razorpay failed to load. Please try again.');
-      }
-
-      // ₹49 in paise.
-      const amount = 4900;
-      const { data: order } = await createOrder(amount);
-
-      const options = {
-        key: process.env.REACT_APP_RAZORPAY_KEY_ID,
-        amount: order.amount,
-        currency: order.currency,
-        name: 'Interview Booking',
-        description: `Booking for ${dateString} at ${selectedSlot}`,
-        order_id: order.id,
-
-        handler: async (response) => {
-          try {
-            const paymentData = {
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-              userEmail: user.email,
-              date: dateString,
-              time: selectedSlot
-            };
-
-            const { data } = await verifyPayment(paymentData);
-
-            if (!data?.success) {
-              throw new Error(
-                data?.message || 'Payment verification failed.'
-              );
-            }
-
-            await refreshUser();
-            await fetchAvailableSlots();
-            await fetchBookedSlots(user.email);
-
-            setSuccess('Payment successful! Interview booked.');
-            setSelectedSlot(null);
-          } catch (err) {
-            setError(
-              err.response?.data?.message ||
-              err.message ||
-              'Payment verification failed. Please contact support if money was deducted.'
-            );
-          } finally {
-            setLoading(false);
-          }
-        },
-
-        prefill: {
-          name: user.name || '',
-          email: user.email,
-          contact: user.phone || ''
-        },
-
-        theme: {
-          color: '#4f46e5'
-        },
-
-        modal: {
-          ondismiss: () => {
-            setLoading(false);
-            setError('Payment cancelled. You can select a slot and try again.');
-          }
-        }
-      };
-
-      const razorpay = new window.Razorpay(options);
-
-      razorpay.on('payment.failed', (response) => {
-        setLoading(false);
-        setError(
-          response.error?.description ||
-          'Payment failed. Please try again.'
-        );
-      });
-
-      razorpay.open();
-    } catch (err) {
-      setError(
-        err.response?.data?.message ||
-        err.message ||
-        'Payment failed. Please try again.'
+    if (!orderId || !order.key) {
+      throw new Error(
+        "Order ID or Razorpay public key is missing from the server response."
       );
-      setLoading(false);
     }
-  };
+
+    const options = {
+      key: order.key,
+      amount: order.amount,
+      currency: order.currency,
+      name: "SBTechWave",
+      description: `Interview booking for ${dateString} at ${selectedSlot}`,
+      order_id: orderId,
+
+      handler: async (response) => {
+        try {
+          // Send the exact fields expected by payment.js.
+          const paymentData = {
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+            userEmail: String(user.email).trim().toLowerCase(),
+            date: dateString,
+            time: selectedSlot,
+          };
+
+          console.log("Verifying payment:", {
+            hasOrderId: Boolean(paymentData.razorpay_order_id),
+            hasPaymentId: Boolean(paymentData.razorpay_payment_id),
+            hasSignature: Boolean(paymentData.razorpay_signature),
+            hasEmail: Boolean(paymentData.userEmail),
+            hasDate: Boolean(paymentData.date),
+            hasTime: Boolean(paymentData.time),
+          });
+
+          const { data } = await verifyPayment(paymentData);
+
+          if (!data?.success) {
+            throw new Error(
+              data?.message || "Payment verification failed."
+            );
+          }
+
+          await refreshUser();
+          await fetchAvailableSlots();
+          await fetchBookedSlots(user.email);
+
+          setSuccess(
+            "Payment successful! Your interview slot is booked."
+          );
+          setSelectedSlot(null);
+        } catch (err) {
+          console.error("PAYMENT VERIFICATION ERROR:", err);
+
+          setError(
+            err.response?.data?.message ||
+              err.message ||
+              "Verification failed. If money was deducted, contact support."
+          );
+        } finally {
+          setLoading(false);
+        }
+      },
+
+      prefill: {
+        name: user.name || "",
+        email: user.email,
+        contact: user.phone || "",
+      },
+
+      theme: {
+        color: "#4f46e5",
+      },
+
+      modal: {
+        ondismiss: () => {
+          setLoading(false);
+          setError(
+            "Payment cancelled. You can select a slot and try again."
+          );
+        },
+      },
+    };
+
+    const checkout = new window.Razorpay(options);
+
+    checkout.on("payment.failed", (response) => {
+      setLoading(false);
+      setError(
+        response.error?.description || "Payment failed. Please try again."
+      );
+    });
+
+    checkout.open();
+  } catch (err) {
+    console.error("PAYMENT START ERROR:", err);
+
+    setError(
+      err.response?.data?.message ||
+        err.message ||
+        "Payment failed. Please try again."
+    );
+
+    setLoading(false);
+  }
+};
+
 
   const slotsForSelectedDate = selectedDate
     ? getSlotsForDate(selectedDate)
