@@ -471,9 +471,9 @@ const HomePage = () => {
           
           <div className="border-t border-slate-700 mt-12 pt-8">
             <div className="flex flex-col md:flex-row justify-between items-center">
-              <p className="text-slate-400">© 2025 FresherSync. All rights reserved.</p>
+              <p className="text-slate-400">© 2025 AI Interview. All rights reserved.</p>
               <div className="mt-4 md:mt-0">
-                <p className="text-slate-400">Email: freshersync@freshersync.xyz</p>
+                <p className="text-slate-400">Email: info@sbtechwave.in</p>
                 <p className="text-slate-400">Phone: +91 6301502931</p>
               </div>
             </div>
