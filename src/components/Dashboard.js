@@ -226,6 +226,7 @@ export default function Dashboard() {
   };
 
 
+
 const handlePayment = async () => {
   if (!user?.email) {
     setError("Please log in to book an interview.");
@@ -255,7 +256,13 @@ const handlePayment = async () => {
     setError(
       "This slot has expired or is no longer available. Please select another slot."
     );
-    await fetchAvailableSlots();
+
+    try {
+      await fetchAvailableSlots();
+    } catch (err) {
+      console.error("Failed to refresh available slots:", err);
+    }
+
     return;
   }
 
@@ -270,14 +277,15 @@ const handlePayment = async () => {
       throw new Error("Razorpay failed to load. Please try again.");
     }
 
-    // Backend determines the actual amount: ₹49.
-    const { data: order } = await createOrder();
+    // Create order on the backend; the backend fixes the amount at ₹49.
+    const orderResponse = await createOrder();
+    const order = orderResponse.data;
 
-    const orderId = order.orderId || order.id;
+    const orderId = order?.orderId || order?.id;
 
-    if (!orderId || !order.key) {
+    if (!orderId || !order?.key || !order?.amount || !order?.currency) {
       throw new Error(
-        "Order ID or Razorpay public key is missing from the server response."
+        "Invalid order response. Check the backend create-order API."
       );
     }
 
@@ -291,7 +299,6 @@ const handlePayment = async () => {
 
       handler: async (response) => {
         try {
-          // Send the exact fields expected by payment.js.
           const paymentData = {
             razorpay_order_id: response.razorpay_order_id,
             razorpay_payment_id: response.razorpay_payment_id,
@@ -301,38 +308,53 @@ const handlePayment = async () => {
             time: selectedSlot,
           };
 
-          console.log("Verifying payment:", {
-            hasOrderId: Boolean(paymentData.razorpay_order_id),
-            hasPaymentId: Boolean(paymentData.razorpay_payment_id),
-            hasSignature: Boolean(paymentData.razorpay_signature),
-            hasEmail: Boolean(paymentData.userEmail),
-            hasDate: Boolean(paymentData.date),
-            hasTime: Boolean(paymentData.time),
-          });
+          // Verify the payment and save the booking on the backend.
+          const verificationResponse = await verifyPayment(paymentData);
+          const result = verificationResponse.data;
 
-          const { data } = await verifyPayment(paymentData);
-
-          if (!data?.success) {
+          if (!result?.success) {
             throw new Error(
-              data?.message || "Payment verification failed."
+              result?.message || "Payment verification failed."
             );
           }
 
-          await refreshUser();
-          await fetchAvailableSlots();
-          await fetchBookedSlots(user.email);
-
+          // IMPORTANT:
+          // Booking is confirmed by the backend.
+          // Show success before attempting optional UI refreshes.
+          setError("");
           setSuccess(
-            "Payment successful! Your interview slot is booked."
+            "Interview Slot Booked Successfully! Your payment is confirmed. Powered by SBTechWave."
           );
           setSelectedSlot(null);
+
+          // Refresh operations must not turn a successful booking
+          // into a displayed payment failure.
+          try {
+            if (typeof refreshUser === "function") {
+              await refreshUser();
+            }
+          } catch (refreshError) {
+            console.error("User refresh error:", refreshError);
+          }
+
+          try {
+            await fetchAvailableSlots();
+          } catch (refreshError) {
+            console.error("Available slots refresh error:", refreshError);
+          }
+
+          try {
+            await fetchBookedSlots(user.email);
+          } catch (refreshError) {
+            console.error("Booked slots refresh error:", refreshError);
+          }
         } catch (err) {
           console.error("PAYMENT VERIFICATION ERROR:", err);
 
           setError(
             err.response?.data?.message ||
               err.message ||
-              "Verification failed. If money was deducted, contact support."
+              "Payment verification failed. If money was deducted, contact support."
           );
         } finally {
           setLoading(false);
@@ -362,9 +384,12 @@ const handlePayment = async () => {
     const checkout = new window.Razorpay(options);
 
     checkout.on("payment.failed", (response) => {
+      console.error("RAZORPAY PAYMENT FAILED:", response.error);
+
       setLoading(false);
       setError(
-        response.error?.description || "Payment failed. Please try again."
+        response.error?.description ||
+          "Payment failed. Please try again."
       );
     });
 
@@ -375,12 +400,13 @@ const handlePayment = async () => {
     setError(
       err.response?.data?.message ||
         err.message ||
-        "Payment failed. Please try again."
+        "Unable to start payment. Please try again."
     );
 
     setLoading(false);
   }
 };
+
 
 
   const slotsForSelectedDate = selectedDate
@@ -477,12 +503,29 @@ const handlePayment = async () => {
             </div>
           )}
 
-          {(error || success) && (
-            <div className="payment-section" aria-live="polite">
-              {error && <p className="error">{error}</p>}
-              {success && <p className="success">{success}</p>}
-            </div>
-          )}
+         
+{(error || success) && (
+  <div className="payment-section" aria-live="polite">
+    {error && <p className="error">{error}</p>}
+
+    {success && (
+      <div className="booking-success" role="status">
+        <div className="booking-success-icon">✓</div>
+
+        <h2>Interview Slot Booked Successfully!</h2>
+
+        <p>
+          Your payment was successful, and your interview slot
+          has been confirmed.
+        </p>
+
+        <p>
+          Powered by <strong>SBTechWave</strong>
+        </p>
+      </div>
+    )}
+  </div>
+)}
 
           {selectedSlot && (
             <div className="payment-section">
