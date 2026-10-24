@@ -233,11 +233,12 @@ const HomePage = () => {
       <section className="pt-24 pb-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto text-center">
           <div className="animate-fade-in">
-            <h1 className="text-4xl md:text-6xl font-bold text-slate-900 mb-6 leading-tight">
-              Start Your Career Journey —{' '}
-              <span className="gradient-text">Book Verified Online Interviews</span>{' '}
-              with Top Recruiters
-            </h1>
+              <h1 className="text-4xl md:text-6xl font-bold text-slate-900 mb-6 leading-tight">
+                Prepare for Your Dream Career —{' '}
+                <span className="gradient-text">
+                  Practice Smarter with AI-Powered Interviews
+                </span>
+              </h1>
             <p className="text-xl text-slate-600 mb-8 max-w-3xl mx-auto leading-relaxed">
               Secure your interview slot in just a few clicks. Pay, verify, and prepare — we handle the rest. 
               Get hired faster with our easy-to-use platform designed for freshers.
