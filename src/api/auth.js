@@ -1,39 +1,54 @@
-import axios from 'axios';
+import axios from "axios";
 
 const API_URL = process.env.REACT_APP_API_AUTH_URL;
 const API = process.env.REACT_APP_API_BASE_URL;
 
+// REGISTER
+export const registerUser = async (userData) => {
+  return axios.post(`${API_URL}/register`, userData);
+};
 
-export const registerUser = async (userData) =>
-  await axios.post(`${API_URL}/register`, userData);
-
-
-
+// VERIFY OTP
 export const verifyOtp = async (email, otpCode) => {
   return axios.post(`${API_URL}/verify-otp`, {
-    email: email,
-    otp: otpCode
+    email,
+    otp: otpCode,
   });
 };
 
+// AVAILABLE SLOTS
+export const getAvailableSlots = async () => {
+  return axios.get(`${API_URL}/slotsavailable`);
+};
 
-export const getAvailableSlots = async () =>
-  await axios.get(`${API_URL}/slotsavailable`);
+// LOGIN
+export const loginUser = async (credentials) => {
+  return axios.post(`${API_URL}/login`, credentials);
+};
 
-export const loginUser = async (credentials) =>
-  await axios.post(`${API_URL}/login`, credentials);
+// CREATE PAYMENT ORDER
+export const createOrder = async (amount) => {
+  return axios.post(`${API}/payment/create-order`, {
+    amount,
+  });
+};
 
-export const createOrder = async (amount) =>
-  await axios.post(`${API}/payment/create-order`, { amount });
+// VERIFY PAYMENT
+export const verifyPayment = async (paymentData) => {
+  return axios.post(`${API}/payment/verify-payment`, paymentData);
+};
 
-export const verifyPayment = async (paymentData) =>
-  await axios.post(`${API}/payment/verify-payment`, paymentData);
+// UPDATE USER PROFILE
+export const updateUserProfile = async (userData) => {
+  return axios.post(`${API_URL}/update`, userData);
+};
 
-export const updateUserProfile = async (userData) =>
-  await axios.post(`${API_URL}/update`, userData);
+// CHANGE PASSWORD
+export const changePassword = async (data) => {
+  return axios.post(`${API_URL}/change-password`, data);
+};
 
-export const changePassword = async (data) =>
-  await axios.post(`${API_URL}/change-password`, data);
-
-export const getBookedSlot = async (email) =>
-  await axios.get(`${API}/bookings/${email}`);
+// GET BOOKED SLOT
+export const getBookedSlot = async (email) => {
+  return axios.get(`${API}/bookings/${encodeURIComponent(email)}`);
+};
